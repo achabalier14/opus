@@ -1,5 +1,5 @@
 // =============================================================================
-// UI.JS - INTERFACE AVEC CONFIGURATION AVANCEE (V81)
+// UI.JS - INTERFACE (V82 - MENU PROGRAMME UNIFIÉ & SIMPLIFIÉ)
 // =============================================================================
 
 const UI = {
@@ -8,8 +8,8 @@ const UI = {
         'MAIN': { title: "MENU PRINCIPAL", items: [ { t: "➕ PROGRAMMES", link: "PROGS" }, { t: "📅 AGENDA", link: "AGENDA_VIEW" }, { t: "⚙️ PARAMETRES", link: "SETTINGS" }, { t: "📚 BIBLIOTHEQUE", link: "LIB_VIEW" } ]},
         'PROGS': { title: "CHOIX PROG", items: [ { t: "🔔 ANGELUS", run: "ANGELUS" }, { t: "⛪ MESSE", run: "MESSE" }, { t: "💍 MARIAGE", run: "MARIAGE" }, { t: "👶 BAPTEME", run: "BAPTEME" }, { t: "🎉 PLENUM (FETES)", run: "PLENUM" }, { t: "⚰️ GLAS (STD)", run: "GLAS" }, { t: "🎶 TE DEUM", run: "TE_DEUM" }, { t: "🔥 TOCSIN (ALERTE)", run: "TOCSIN" } ]},
         
-        // Menu Paramètres enrichi
-        'SETTINGS': { title: "PARAMETRES", items: [ { t: "🛠️ CONFIG. PROGRAMMES", link: "SET_PROGS_LIST" }, { t: "🕒 HORLOGE SYSTEME", link: "SET_CLOCK" }, { t: "🤖 AUTOMATISMES", link: "SET_AUTO" }, { t: "⏳ DUREES PROG.", link: "SET_DUR" }, { t: "🌙 MODE NUIT", link: "SET_NIGHT" } ]},
+        // MODIFICATION ICI : Suppression de "DUREES PROG"
+        'SETTINGS': { title: "PARAMETRES", items: [ { t: "🛠️ CONFIG. PROGRAMMES", link: "SET_PROGS_LIST" }, { t: "🕒 HORLOGE SYSTEME", link: "SET_CLOCK" }, { t: "🤖 AUTOMATISMES", link: "SET_AUTO" }, { t: "🌙 MODE NUIT", link: "SET_NIGHT" } ]},
         
         'SET_CLOCK': { title: "REGLAGE HORLOGE", items: [ { t: "Mode: ", action: "TOGGLE_CLOCK_MODE" }, { t: "REGLER HEURE", action: "EDIT_SYS_TIME" }, { t: "REGLER DATE", action: "EDIT_SYS_DATE" } ]},
         'SET_AUTO': { title: "AUTOMATISMES", items: [ { t: "🔔 SONNERIE HORAIRE >", link: "SET_AUTO_CHIME" }, { t: "⛪ ANGELUS >", link: "ANG_LIST" } ]},
@@ -17,7 +17,6 @@ const UI = {
         'SET_AUTO_H': { title: "CONFIG. HEURES", items: [ { t: "Active: ", action: "TOG_H_ON" }, { t: "Repetition: ", action: "TOG_H_REP" }, { t: "Delai Rep: ", action: "EDIT_H_DEL" }, { t: "Intervalle: ", action: "EDIT_H_INT" } ]},
         'SET_AUTO_M': { title: "CONFIG. DEMIES", items: [ { t: "Active: ", action: "TOG_M_ON" }, { t: "Repetition: ", action: "TOG_M_REP" }, { t: "Delai Rep: ", action: "EDIT_M_DEL" } ]},
         'SET_AUTO_Q': { title: "CONFIG. QUARTS", items: [ { t: "Active: ", action: "TOG_Q_ON" }, { t: "Repetition: ", action: "TOG_Q_REP" }, { t: "Delai Rep: ", action: "EDIT_Q_DEL" } ]},
-        'SET_DUR': { title: "DUREES PAR DEFAUT", items: [ { t: "Angelus: ", action: "EDIT_D_ANG" }, { t: "Messe: ", action: "EDIT_D_MES" }, { t: "Mariage: ", action: "EDIT_D_MAR" }, { t: "Plenum: ", action: "EDIT_D_PLENUM" }, { t: "Bapteme: ", action: "EDIT_D_BAPTEME" }, { t: "Glas: ", action: "EDIT_D_GLAS" }, { t: "Te Deum: ", action: "EDIT_D_TEDEUM" }, { t: "Tocsin: ", action: "EDIT_D_TOCSIN" } ]},
         'SET_NIGHT': { title: "MODE NUIT", items: [ { t: "Active: ", action: "TOG_NIGHT" }, { t: "Debut: ", action: "EDIT_NIGHT_START" }, { t: "Fin: ", action: "EDIT_NIGHT_END" } ]}
     },
 
@@ -48,6 +47,7 @@ const UI = {
             const te = STATE.timeEditor;
             let title = "REGLAGE";
             if(te.type==="TIME") title = "VALEUR (H:M:S)";
+            if(te.type==="MIN_SEC") title = "VALEUR (MIN:SEC)"; // Nouveau Titre
             if(te.type==="DATE") title = "REGLAGE DATE";
             if(te.type==="INT") title = "VALEUR (SEC)";
             if(te.type==="DECIMAL") title = "INTERVALLE (SEC)";
@@ -62,14 +62,14 @@ const UI = {
 
         const mode = STATE.menuStack[STATE.menuStack.length-1];
 
-        // --- NOUVEAUX MENUS DYNAMIQUES POUR CONFIG PROG ---
+        // --- NOUVEAUX MENUS DYNAMIQUES (V82) ---
 
-        // 1. LISTE DES PROGRAMMES
+        // 1. LISTE DES PROGRAMMES (FILTRÉE : PAS DE TOCSIN/TE DEUM)
         if(mode === "SET_PROGS_LIST") {
             let h = `<div class="menu-title">CHOIX PROGRAMME</div>`;
-            // On n'affiche que ceux qui ont une config volée (Messe, Mariage, Plenum, etc.)
-            const keys = Object.keys(PRESET_CONFIGS);
-            keys.forEach((k, idx) => {
+            // Liste manuelle des programmes de "Volée" configurables
+            const allowedProgs = ["MESSE", "MARIAGE", "BAPTEME", "PLENUM", "ANGELUS", "GLAS"];
+            allowedProgs.forEach((k, idx) => {
                 h += `<div class="menu-item ${idx===STATE.cursor?'selected':''}"><span>${k}</span></div>`;
             });
             scr.innerHTML = h;
@@ -77,29 +77,47 @@ const UI = {
             return;
         }
 
-        // 2. LISTE DES CLOCHES POUR LE PROGRAMME CHOISI
+        // 2. MENU INTERMEDIAIRE (DUREE + CLOCHES)
+        if(mode === "SET_PROG_ROOT") {
+            const pName = STATE.selectedPreset;
+            // Récupération de la durée actuelle
+            let currentDur = 0;
+            const map = {"ANGELUS":"dur_angelus","MESSE":"dur_messe","MARIAGE":"dur_mariage","PLENUM":"dur_plenum","BAPTEME":"dur_bapteme","GLAS":"dur_glas"};
+            if(map[pName]) currentDur = SETTINGS[map[pName]];
+
+            let h = `<div class="menu-title">CONFIG: ${pName}</div>`;
+            h += `<div class="menu-item ${STATE.cursor===0?'selected':''}"><span>DUREE PAR DEFAUT:</span><span>${secToMinSec(currentDur)}</span></div>`;
+            h += `<div class="menu-item ${STATE.cursor===1?'selected':''}"><span>REGLER CLOCHES ></span></div>`;
+            
+            scr.innerHTML = h; return;
+        }
+
+        // 3. LISTE DES CLOCHES (Identique V81)
         if(mode === "SET_PROG_BELLS") {
             const pName = STATE.selectedPreset;
             let h = `<div class="menu-title">${pName}: CLOCHES</div>`;
             for(let i=1; i<=5; i++) {
                 const conf = PRESET_CONFIGS[pName][i];
-                if(!conf) continue; // Si pas de config pour cette cloche (ex: futures extensions)
+                if(!conf) continue; 
                 const status = conf.active ? "ON" : "OFF";
                 h += `<div class="menu-item ${i-1===STATE.cursor?'selected':''}" style="justify-content:space-between"><span>CLOCHE ${i}</span><span>${status}</span></div>`;
             }
             scr.innerHTML = h; return;
         }
 
-        // 3. PARAMETRES DE LA CLOCHE CHOISIE (Delay / Cutoff)
+        // 4. PARAMETRES DE LA CLOCHE (Modifié : Min/Sec uniquement)
         if(mode === "SET_PROG_PARAM") {
             const pName = STATE.selectedPreset;
             const bId = STATE.selectedBellConfig;
             const conf = PRESET_CONFIGS[pName][bId];
             
+            // Fonction d'affichage simplifiée (Min:Sec)
+            const showMS = (s) => `${pad(Math.floor(s/60))}:${pad(s%60)}`;
+
             let h = `<div class="menu-title">${pName} > CLOCHE ${bId}</div>`;
             h += `<div class="menu-item ${STATE.cursor===0?'selected':''}"><span>Active: </span><span>${conf.active?"OUI":"NON"}</span></div>`;
-            h += `<div class="menu-item ${STATE.cursor===1?'selected':''}"><span>Delai Depart: </span><span>${secToMinSec(conf.delay)}</span></div>`;
-            h += `<div class="menu-item ${STATE.cursor===2?'selected':''}"><span>Arret Avant: </span><span>${secToMinSec(conf.cutoff)}</span></div>`;
+            h += `<div class="menu-item ${STATE.cursor===1?'selected':''}"><span>Delai Depart: </span><span>${showMS(conf.delay)}</span></div>`;
+            h += `<div class="menu-item ${STATE.cursor===2?'selected':''}"><span>Arret Avant: </span><span>${showMS(conf.cutoff)}</span></div>`;
             
             scr.innerHTML = h; return;
         }
@@ -202,7 +220,7 @@ const UI = {
 
         this.updateMenuLabels(mode);
         const m = this.menus[mode];
-        if(!m) return; // Sécurité pour les menus dynamiques
+        if(!m) return;
         let h = `<div class="menu-title">${m.title}</div>`;
         m.items.forEach((it, idx) => h += `<div class="menu-item ${idx===STATE.cursor?'selected':''}"><span>${it.t}</span></div>`);
         scr.innerHTML = h;
@@ -220,16 +238,10 @@ const UI = {
         }
         if(mode==="SET_AUTO_M") { setLbl(mode,0,"Active: ",SETTINGS.auto_m.on?"ON":"OFF"); setLbl(mode,1,"Repetition: ",SETTINGS.auto_m.rep?"ON":"OFF"); setLbl(mode,2,"Delai Rep: ", secToMinSec(SETTINGS.auto_m.del)); }
         if(mode==="SET_AUTO_Q") { setLbl(mode,0,"Active: ",SETTINGS.auto_q.on?"ON":"OFF"); setLbl(mode,1,"Repetition: ",SETTINGS.auto_q.rep?"ON":"OFF"); setLbl(mode,2,"Delai Rep: ", secToMinSec(SETTINGS.auto_q.del)); }
-        if(mode==="SET_DUR") { 
-            const d = (s) => secToMinSec(s);
-            setLbl(mode,0,"Angelus: ",d(SETTINGS.dur_angelus)); setLbl(mode,1,"Messe: ",d(SETTINGS.dur_messe)); setLbl(mode,2,"Mariage: ",d(SETTINGS.dur_mariage)); setLbl(mode,3,"Plenum: ",d(SETTINGS.dur_plenum));
-            setLbl(mode,4,"Bapteme: ",d(SETTINGS.dur_bapteme)); setLbl(mode,5,"Glas: ",d(SETTINGS.dur_glas)); setLbl(mode,6,"Te Deum: ",d(SETTINGS.dur_tedeum)); setLbl(mode,7,"Tocsin: ",d(SETTINGS.dur_tocsin));
-        }
         if(mode==="SET_NIGHT") { this.menus[mode].items[0].t="Active: "+(SETTINGS.night_mode?"OUI":"NON"); this.menus[mode].items[1].t="Debut: "+pad(SETTINGS.night_start_h)+":"+pad(SETTINGS.night_start_m); this.menus[mode].items[2].t="Fin: "+pad(SETTINGS.night_end_h)+":"+pad(SETTINGS.night_end_m); }
     },
 
     renderHome: function(h, m, s, dateStr) {
-        // ... (Code renderHome identique V74, ne change pas) ...
         const modeTxt = (STATE.manualMode === "VOL") ? "VOLÉE" : "TINT";
         let nextProgTxt = "";
         
@@ -273,7 +285,6 @@ const UI = {
 };
 
 const SYS = {
-    // ... (manualDirect, stopAll, fKey identiques V74) ...
     manualDirect: function(n) {
         if(SETTINGS.emergency_mode) return;
         if(STATE.menuStack[STATE.menuStack.length-1] === "FORM" && STATE.formData.progType === "MANU") {
@@ -317,16 +328,39 @@ const SYS = {
             UI.render(); return; 
         }
 
-        // --- NAVIGATION DANS LES NOUVEAUX MENUS CONFIG ---
+        // --- NAVIGATION MENU CONFIG PROGRAMMES ---
         
         if(mode === "SET_PROGS_LIST") {
-            const keys = Object.keys(PRESET_CONFIGS);
-            if(key==="UP") { STATE.cursor--; if(STATE.cursor<0) STATE.cursor=keys.length-1; }
-            if(key==="DOWN") { STATE.cursor++; if(STATE.cursor>=keys.length) STATE.cursor=0; }
+            // Liste filtrée des programmes "Volée"
+            const allowedProgs = ["MESSE", "MARIAGE", "BAPTEME", "PLENUM", "ANGELUS", "GLAS"];
+            if(key==="UP") { STATE.cursor--; if(STATE.cursor<0) STATE.cursor=allowedProgs.length-1; }
+            if(key==="DOWN") { STATE.cursor++; if(STATE.cursor>=allowedProgs.length) STATE.cursor=0; }
             if(key==="OK" || key==="RIGHT") {
-                STATE.selectedPreset = keys[STATE.cursor];
-                STATE.menuStack.push("SET_PROG_BELLS");
+                STATE.selectedPreset = allowedProgs[STATE.cursor];
+                STATE.menuStack.push("SET_PROG_ROOT"); // On va au menu racine du programme
                 STATE.cursor = 0;
+            }
+            UI.render(); return;
+        }
+
+        if(mode === "SET_PROG_ROOT") {
+            if(key==="UP") { STATE.cursor--; if(STATE.cursor<0) STATE.cursor=1; }
+            if(key==="DOWN") { STATE.cursor++; if(STATE.cursor>1) STATE.cursor=0; }
+            if(key==="OK" || key==="RIGHT") {
+                if(STATE.cursor === 0) {
+                    // Editer la durée par défaut
+                    const pName = STATE.selectedPreset;
+                    const map = {"ANGELUS":"dur_angelus","MESSE":"dur_messe","MARIAGE":"dur_mariage","PLENUM":"dur_plenum","BAPTEME":"dur_bapteme","GLAS":"dur_glas"};
+                    if(map[pName]) {
+                        const val = SETTINGS[map[pName]];
+                        // On ouvre un éditeur MIN:SEC pour la durée
+                        openUnifiedEditor("SET_PROG_DUR_"+map[pName], "MIN_SEC", [Math.floor(val/60), val%60], ["MIN","SEC"]);
+                    }
+                } else {
+                    // Aller au choix des cloches
+                    STATE.menuStack.push("SET_PROG_BELLS");
+                    STATE.cursor = 0;
+                }
             }
             UI.render(); return;
         }
@@ -355,20 +389,19 @@ const SYS = {
                     saveData(); 
                 }
                 else if(STATE.cursor===1) {
-                    // Editer délai départ
-                    openUnifiedEditor("CONF_DELAY", "TIME", [0, Math.floor(conf.delay/60), conf.delay%60], ["H","M","S"]);
+                    // Editer délai départ (MIN:SEC seulement)
+                    openUnifiedEditor("CONF_DELAY", "MIN_SEC", [Math.floor(conf.delay/60), conf.delay%60], ["MIN","SEC"]);
                 }
                 else if(STATE.cursor===2) {
-                    // Editer arrêt avant
-                    openUnifiedEditor("CONF_CUTOFF", "TIME", [0, Math.floor(conf.cutoff/60), conf.cutoff%60], ["H","M","S"]);
+                    // Editer arrêt avant (MIN:SEC seulement)
+                    openUnifiedEditor("CONF_CUTOFF", "MIN_SEC", [Math.floor(conf.cutoff/60), conf.cutoff%60], ["MIN","SEC"]);
                 }
             }
             UI.render(); return;
         }
 
-        // ... (Reste de la navigation, gestion ANG_FORM, etc. identique) ...
-        // Je remets le bloc standard pour éviter les erreurs de copier-coller
-
+        // ... (Reste navigation identique) ...
+        
         if(mode === "ANG_FORM") {
             const isNew = (STATE.editingAngelusIdx === -1); const max = isNew ? 1 : 2;
             if(key==="UP") { STATE.cursor--; if(STATE.cursor<0) STATE.cursor=max; }
@@ -463,12 +496,6 @@ const SYS = {
                 else if(it.action === "EDIT_SYS_DATE") openUnifiedEditor("SYS_DATE", "DATE", [SETTINGS.date_d, SETTINGS.date_m, SETTINGS.date_y], ["J","M","A"]);
                 else if(it.action === "TOGGLE_CLOCK_MODE") { SETTINGS.clock_mode=(SETTINGS.clock_mode==="AUTO"?"MANU":"AUTO"); saveData(); }
                 
-                else if(it.action && it.action.startsWith("EDIT_D_")) {
-                    const key = it.action.substring(7).toLowerCase(); 
-                    const map = {"ang":"dur_angelus","mes":"dur_messe","mar":"dur_mariage","plenum":"dur_plenum","bapteme":"dur_bapteme","glas":"dur_glas","tedeum":"dur_tedeum","tocsin":"dur_tocsin"};
-                    const settKey = map[key]; const v = SETTINGS[settKey];
-                    openUnifiedEditor("SET_" + settKey, "TIME", [Math.floor(v/3600), Math.floor((v%3600)/60), v%60], ["H","M","S"]);
-                } 
                 else if(it.action && it.action.startsWith("TOG_")) { 
                     const k = it.action.substring(4);
                     if(k==="H_ON") SETTINGS.auto_h.on=!SETTINGS.auto_h.on; if(k==="H_REP") SETTINGS.auto_h.rep=!SETTINGS.auto_h.rep;
@@ -512,25 +539,32 @@ const SYS = {
                     if(te.cursor===0) { if(te.vals[0]>23) te.vals[0]=0; if(te.vals[0]<0) te.vals[0]=23; }
                     else { if(te.vals[te.cursor]>59) te.vals[te.cursor]=0; if(te.vals[te.cursor]<0) te.vals[te.cursor]=59; }
                 }
+                if(te.type==="MIN_SEC") {
+                     if(te.vals[te.cursor]>59) te.vals[te.cursor]=0; if(te.vals[te.cursor]<0) te.vals[te.cursor]=59;
+                }
             }
         }
         if(key==="OK") { 
             // Sauvegarde des nouveaux champs de config
             if(te.targetField === "CONF_DELAY") {
-                const sec = (te.vals[1]*60) + te.vals[2];
-                PRESET_CONFIGS[STATE.selectedPreset][STATE.selectedBellConfig].delay = sec;
+                // vals[0] = MIN, vals[1] = SEC
+                PRESET_CONFIGS[STATE.selectedPreset][STATE.selectedBellConfig].delay = (te.vals[0]*60) + te.vals[1];
             }
             if(te.targetField === "CONF_CUTOFF") {
-                const sec = (te.vals[1]*60) + te.vals[2];
-                PRESET_CONFIGS[STATE.selectedPreset][STATE.selectedBellConfig].cutoff = sec;
+                PRESET_CONFIGS[STATE.selectedPreset][STATE.selectedBellConfig].cutoff = (te.vals[0]*60) + te.vals[1];
+            }
+            
+            // Sauvegarde de la durée du programme
+            if(te.targetField && te.targetField.startsWith("SET_PROG_DUR_")) {
+                 const keyName = te.targetField.substring(13); // ex: dur_messe
+                 SETTINGS[keyName] = (te.vals[0]*60) + te.vals[1];
             }
 
-            // ... (reste des sauvegardes habituelles) ...
             if(te.targetField === "EDIT_ANG_TIME") {
                 STATE.tempAngelus.h = te.vals[0]; STATE.tempAngelus.m = te.vals[1]; STATE.tempAngelus.s = te.vals[2];
                 te.active = false; UI.render(); return;
             }
-            // ... (Copiez ici le bloc de sauvegarde standard de la V56/V73 si besoin, mais l'essentiel est ci-dessus pour la nouveauté)
+            
             const target = te.targetField;
             const now = new Date(SETTINGS.date_y, SETTINGS.date_m - 1, SETTINGS.date_d, SETTINGS.time_h, SETTINGS.time_m, SETTINGS.time_s);
 
