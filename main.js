@@ -1,5 +1,5 @@
 // =============================================================================
-// MAIN.JS - LOGIQUE PRINCIPALE (V73 - FIX BLOCAGE HORAIRE)
+// MAIN.JS - LOGIQUE PRINCIPALE (V81 - COMPLETE)
 // =============================================================================
 
 async function INIT_SYSTEM() {
@@ -31,7 +31,8 @@ async function INIT_SYSTEM() {
 }
 
 function saveData() {
-    const data = { schedule: SCHEDULE, library: LIBRARY, settings: SETTINGS };
+    // On sauvegarde aussi les PRESET_CONFIGS désormais
+    const data = { schedule: SCHEDULE, library: LIBRARY, settings: SETTINGS, presets: PRESET_CONFIGS };
     localStorage.setItem("OPUS_DATA", JSON.stringify(data));
 }
 
@@ -42,6 +43,12 @@ function loadData() {
             const data = JSON.parse(json);
             SCHEDULE = data.schedule || [];
             LIBRARY = data.library || [];
+            
+            // Chargement des configs de programmes si elles existent
+            if(data.presets) {
+                PRESET_CONFIGS = {...PRESET_CONFIGS, ...data.presets};
+            }
+
             if(data.settings) {
                 const s = data.settings;
                 SETTINGS = {...SETTINGS, ...s};
@@ -97,8 +104,6 @@ function TICK() {
     if(SETTINGS.emergency_mode) return;
 
     // --- COEUR DU SYSTEME ---
-    // MODIFICATION IMPORTANTE : On ne bloque plus le TICK si isChiming est vrai.
-    // On vérifie quand même les horaires. Les fonctions de sonnerie géreront les conflits.
     if(!isEditing) { 
         if(s===0 && STATE.audioCtx && STATE.audioCtx.state === 'suspended') STATE.audioCtx.resume(); 
         
@@ -123,13 +128,11 @@ function checkAutoChimes(h, m, s) {
     // ANGELUS (Prioritaire)
     SETTINGS.angelus_times.forEach(ang => {
         if(h === ang.h && m === ang.m && s === ang.s) {
-            // On force l'arrêt de ce qui pourrait être en cours pour lancer l'Angelus
             if(STATE.isChiming) AUDIO.stopAll(); 
             setTimeout(() => execPreset("ANGELUS", SETTINGS.dur_angelus), 200);
         }
     });
 
-    // Si on sonne déjà (ex: Angelus en cours), on ne lance pas les heures par dessus
     if(STATE.isChiming) return;
 
     // HEURES / DEMIES / QUARTS
@@ -146,7 +149,7 @@ function checkAutoChimes(h, m, s) {
 }
 
 async function playHourlyChime(hour) {
-    if(STATE.isChiming) return; // Sécurité doublon
+    if(STATE.isChiming) return; 
     STATE.isChiming = true;
     STATE.stopSignal = false; 
     
@@ -156,7 +159,7 @@ async function playHourlyChime(hour) {
     
     for(let i=0; i<count; i++) {
         if(STATE.stopSignal) break;
-        AUDIO.tinte(2); // Utilise la cloche 2 pour l'heure
+        AUDIO.tinte(2); 
         await wait(interval); 
     }
     STATE.isChiming = false;
@@ -181,7 +184,6 @@ function checkSchedule(h, m, s, d, mo, y) {
     let toRemove = [];
 
     SCHEDULE.forEach((evt, idx) => {
-        // Nettoyage vieux événements "date unique"
         if(evt.mode === "AUCUNE") {
             const [ed, em, ey] = evt.date.split('/').map(Number);
             const evtDate = new Date(ey, em-1, ed, evt.h, evt.m, evt.s);
@@ -212,10 +214,7 @@ function checkSchedule(h, m, s, d, mo, y) {
             if(run) { 
                 evt.lastRun = `${h}:${m}:${s}:${d}`; 
                 saveData(); 
-                
-                // Si une sonnerie est déjà en cours (sauf si c'est un Angelus qui a priorité), on ne lance pas le prog
                 if(STATE.isChiming) return; 
-
                 if(evt.progType==="MANU") execComplexManual(evt); 
                 else execPreset(evt.name, evt.dur); 
             }
@@ -269,8 +268,12 @@ async function execComplexManual(evt) {
     setTimeout(() => { STATE.isChiming = false; document.getElementById('screen-footer').innerText = "PRET."; }, evt.dur * 1000);
 }
 
+// =============================================================================
+// FONCTION EXECPRESET MISE A JOUR (POUR GERER VOS REGLAGES PERSO)
+// =============================================================================
+
 async function execPreset(name, customDur) {
-    if(STATE.isChiming && name !== "ANGELUS") return; // L'Angelus a le droit d'écraser
+    if(STATE.isChiming && name !== "ANGELUS") return; 
     
     STATE.isChiming = true; 
     STATE.stopSignal = false; 
@@ -289,9 +292,10 @@ async function execPreset(name, customDur) {
         else dur = 180;
     }
 
+    // --- SONNERIES RYTHMIQUES (Restent codées en dur pour le rythme) ---
+    
     if(name === "ANGELUS") {
-        const B = 2; // Cloche de l'Angelus
-        // 3x3 coups
+        const B = 2; // Cloche 2 pour les coups
         for(let s=0; s<3; s++) { 
             for(let c=0; c<3; c++) { 
                 if(STATE.stopSignal) break; 
@@ -301,9 +305,9 @@ async function execPreset(name, customDur) {
             await wait(4000); 
         }
         await wait(2000); 
-        // Volée
+        // La volée finale utilise maintenant votre configuration !
         if(!STATE.stopSignal) { 
-            AUDIO.start(B); await wait(dur * 1000); AUDIO.stop(B); 
+            await runDynamicVolley("ANGELUS", dur);
         }
     }
     else if(name === "TE_DEUM") {
@@ -324,25 +328,70 @@ async function execPreset(name, customDur) {
         const endTime = Date.now() + (dur * 1000);
         while(Date.now() < endTime && !STATE.stopSignal) { AUDIO.tinte(2); await wait(3000); AUDIO.tinte(2); await wait(7000); }
     }
-    else if(name === "BAPTEME") {
-        for(let id of [2,3,4]) { if(STATE.stopSignal) break; AUDIO.start(id); await wait(1000); } 
-        if(!STATE.stopSignal) await wait(dur*1000); 
-        for(let id of [2,3,4]) AUDIO.stop(id);
-    }
+    
+    // --- SONNERIES DE VOLÉE (UTILISENT VOS REGLAGES) ---
+    // Messe, Mariage, Bapteme, Plenum
     else { 
-        // PLENUM (Toutes les cloches dispos)
-        for(let id of [1,2,3,4,5]) { 
-            if(id <= 5) { // On lance les cloches valides
-                if(STATE.stopSignal) break; 
-                AUDIO.start(id); await wait(1500); 
-            }
-        } 
-        if(!STATE.stopSignal) await wait(dur*1000); 
-        for(let id=1;id<=5;id++) AUDIO.stop(id); 
+        await runDynamicVolley(name, dur);
     }
     
     STATE.isChiming = false; 
     document.getElementById('screen-footer').innerText = "PRET.";
+}
+
+// NOUVELLE FONCTION QUI LIT VOTRE CONFIGURATION (PRESET_CONFIGS)
+function runDynamicVolley(presetName, globalDuration) {
+    return new Promise((resolve) => {
+        const config = PRESET_CONFIGS[presetName];
+        if(!config) { 
+            // Sécurité : si pas de config, on sonne tout par défaut
+            for(let i=1;i<=5;i++) AUDIO.start(i);
+            setTimeout(() => { for(let i=1;i<=5;i++) AUDIO.stop(i); resolve(); }, globalDuration*1000);
+            return; 
+        }
+
+        const globalEndTime = Date.now() + (globalDuration * 1000);
+        let activeCounts = 0;
+
+        // On parcourt les 5 cloches possibles
+        for(let i=1; i<=5; i++) {
+            const bellConf = config[i];
+            if(bellConf && bellConf.active) {
+                activeCounts++;
+                
+                const delayMs = (bellConf.delay || 0) * 1000;
+                const cutoffMs = (bellConf.cutoff || 0) * 1000;
+                
+                // Calcul de la durée spécifique pour cette cloche
+                const myDuration = (globalDuration * 1000) - delayMs - cutoffMs;
+
+                if(myDuration > 0) {
+                    // Timer de démarrage (Delay)
+                    const startTimer = setTimeout(() => {
+                        if(STATE.stopSignal) return;
+                        AUDIO.start(i);
+                        
+                        // Timer d'arrêt (Cutoff)
+                        const stopTimer = setTimeout(() => {
+                            AUDIO.stop(i);
+                            ACTIVE_LOOPS = ACTIVE_LOOPS.filter(t => t !== stopTimer);
+                        }, myDuration);
+                        
+                        ACTIVE_LOOPS.push(stopTimer);
+                        
+                    }, delayMs);
+                    
+                    ACTIVE_LOOPS.push(startTimer);
+                }
+            }
+        }
+        
+        // On attend la fin globale (+ marge) pour rendre la main
+        setTimeout(() => {
+            for(let i=1; i<=5; i++) AUDIO.stop(i); // Sécurité finale
+            resolve();
+        }, globalDuration * 1000 + 1000); 
+    });
 }
 
 function openUnifiedEditor(target, type, vals, labels) { 

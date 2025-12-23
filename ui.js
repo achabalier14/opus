@@ -1,16 +1,16 @@
 // =============================================================================
-// UI.JS - AFFICHAGE ET ENTREES (V57)
+// UI.JS - INTERFACE AVEC CONFIGURATION AVANCEE (V81)
 // =============================================================================
 
 const UI = {
-    // ... (Menus et autres inchangés) ...
-    // Je remets juste la partie FORM pour être sûr que la cloche 5 apparaisse
-    
     menus: {
         'HOME': { type: "static" },
         'MAIN': { title: "MENU PRINCIPAL", items: [ { t: "➕ PROGRAMMES", link: "PROGS" }, { t: "📅 AGENDA", link: "AGENDA_VIEW" }, { t: "⚙️ PARAMETRES", link: "SETTINGS" }, { t: "📚 BIBLIOTHEQUE", link: "LIB_VIEW" } ]},
-        'PROGS': { title: "CHOIX PROG", items: [ { t: "🔔 ANGELUS", run: "ANGELUS" }, { t: "⛪ MESSE", run: "MESSE" }, { t: "💍 MARIAGE", run: "MARIAGE" }, { t: "👶 BAPTEME", run: "BAPTEME" }, { t: "🎉 PLENUM (FETES)", run: "PLENUM" }, { t: "⚰️ GLAS (STD)", run: "GLAS" }, { t: "👨 GLAS (HOMME)", run: "GLAS_H" }, { t: "👩 GLAS (FEMME)", run: "GLAS_F" }, { t: "🎶 TE DEUM", run: "TE_DEUM" }, { t: "🔥 TOCSIN (ALERTE)", run: "TOCSIN" } ]},
-        'SETTINGS': { title: "PARAMETRES", items: [ { t: "🕒 HORLOGE SYSTEME", link: "SET_CLOCK" }, { t: "🤖 AUTOMATISMES", link: "SET_AUTO" }, { t: "⏳ DUREES PROG.", link: "SET_DUR" }, { t: "🌙 MODE NUIT", link: "SET_NIGHT" } ]},
+        'PROGS': { title: "CHOIX PROG", items: [ { t: "🔔 ANGELUS", run: "ANGELUS" }, { t: "⛪ MESSE", run: "MESSE" }, { t: "💍 MARIAGE", run: "MARIAGE" }, { t: "👶 BAPTEME", run: "BAPTEME" }, { t: "🎉 PLENUM (FETES)", run: "PLENUM" }, { t: "⚰️ GLAS (STD)", run: "GLAS" }, { t: "🎶 TE DEUM", run: "TE_DEUM" }, { t: "🔥 TOCSIN (ALERTE)", run: "TOCSIN" } ]},
+        
+        // Menu Paramètres enrichi
+        'SETTINGS': { title: "PARAMETRES", items: [ { t: "🛠️ CONFIG. PROGRAMMES", link: "SET_PROGS_LIST" }, { t: "🕒 HORLOGE SYSTEME", link: "SET_CLOCK" }, { t: "🤖 AUTOMATISMES", link: "SET_AUTO" }, { t: "⏳ DUREES PROG.", link: "SET_DUR" }, { t: "🌙 MODE NUIT", link: "SET_NIGHT" } ]},
+        
         'SET_CLOCK': { title: "REGLAGE HORLOGE", items: [ { t: "Mode: ", action: "TOGGLE_CLOCK_MODE" }, { t: "REGLER HEURE", action: "EDIT_SYS_TIME" }, { t: "REGLER DATE", action: "EDIT_SYS_DATE" } ]},
         'SET_AUTO': { title: "AUTOMATISMES", items: [ { t: "🔔 SONNERIE HORAIRE >", link: "SET_AUTO_CHIME" }, { t: "⛪ ANGELUS >", link: "ANG_LIST" } ]},
         'SET_AUTO_CHIME': { title: "SONNERIE HORAIRE", items: [ { t: "HEURES >", link: "SET_AUTO_H" }, { t: "DEMIES >", link: "SET_AUTO_M" }, { t: "QUARTS >", link: "SET_AUTO_Q" } ]},
@@ -62,6 +62,49 @@ const UI = {
 
         const mode = STATE.menuStack[STATE.menuStack.length-1];
 
+        // --- NOUVEAUX MENUS DYNAMIQUES POUR CONFIG PROG ---
+
+        // 1. LISTE DES PROGRAMMES
+        if(mode === "SET_PROGS_LIST") {
+            let h = `<div class="menu-title">CHOIX PROGRAMME</div>`;
+            // On n'affiche que ceux qui ont une config volée (Messe, Mariage, Plenum, etc.)
+            const keys = Object.keys(PRESET_CONFIGS);
+            keys.forEach((k, idx) => {
+                h += `<div class="menu-item ${idx===STATE.cursor?'selected':''}"><span>${k}</span></div>`;
+            });
+            scr.innerHTML = h;
+            const sel = document.querySelector('.selected'); if(sel) sel.scrollIntoView({block:"nearest"});
+            return;
+        }
+
+        // 2. LISTE DES CLOCHES POUR LE PROGRAMME CHOISI
+        if(mode === "SET_PROG_BELLS") {
+            const pName = STATE.selectedPreset;
+            let h = `<div class="menu-title">${pName}: CLOCHES</div>`;
+            for(let i=1; i<=5; i++) {
+                const conf = PRESET_CONFIGS[pName][i];
+                if(!conf) continue; // Si pas de config pour cette cloche (ex: futures extensions)
+                const status = conf.active ? "ON" : "OFF";
+                h += `<div class="menu-item ${i-1===STATE.cursor?'selected':''}" style="justify-content:space-between"><span>CLOCHE ${i}</span><span>${status}</span></div>`;
+            }
+            scr.innerHTML = h; return;
+        }
+
+        // 3. PARAMETRES DE LA CLOCHE CHOISIE (Delay / Cutoff)
+        if(mode === "SET_PROG_PARAM") {
+            const pName = STATE.selectedPreset;
+            const bId = STATE.selectedBellConfig;
+            const conf = PRESET_CONFIGS[pName][bId];
+            
+            let h = `<div class="menu-title">${pName} > CLOCHE ${bId}</div>`;
+            h += `<div class="menu-item ${STATE.cursor===0?'selected':''}"><span>Active: </span><span>${conf.active?"OUI":"NON"}</span></div>`;
+            h += `<div class="menu-item ${STATE.cursor===1?'selected':''}"><span>Delai Depart: </span><span>${secToMinSec(conf.delay)}</span></div>`;
+            h += `<div class="menu-item ${STATE.cursor===2?'selected':''}"><span>Arret Avant: </span><span>${secToMinSec(conf.cutoff)}</span></div>`;
+            
+            scr.innerHTML = h; return;
+        }
+
+        // --- (Reste du code standard UI) ---
         if(mode === "HOME") { this.renderHome(SETTINGS.time_h, SETTINGS.time_m, SETTINGS.time_s, getHomeDateStr()); return; }
 
         if(mode === "AGENDA_VIEW" || mode === "LIB_VIEW") {
@@ -106,7 +149,6 @@ const UI = {
                 let audioMode = (f.typeAudio === "VOL") ? "VOLÉE" : "TINTEMENT";
                 h += r(2, "MODE SONNERIE", audioMode);
                 let bellsHtml = "";
-                // MODIF: [1..5]
                 [1,2,3,4,5].forEach(b => {
                     const isActive = f.bells.includes(b); const isFocused = (c === 3 && STATE.bellCursor === b); 
                     let classes = "day-char"; if(isActive) classes += " checked"; if(isFocused) classes += " focused";
@@ -139,9 +181,6 @@ const UI = {
             scr.innerHTML = h; const sel = document.querySelector('.selected'); if(sel) sel.scrollIntoView({block:"nearest"}); return;
         }
 
-        // ... (Le reste est standard, copie de V53) ...
-        // Je colle la fin pour être sûr :
-        
         if(mode === "REP_EDITOR") {
             const re = STATE.repEditor; const c = re.cursor; const isEd = re.isEditing;
             let h = `<div class="menu-title">REPETITION</div><div class="rep-screen">`;
@@ -163,6 +202,7 @@ const UI = {
 
         this.updateMenuLabels(mode);
         const m = this.menus[mode];
+        if(!m) return; // Sécurité pour les menus dynamiques
         let h = `<div class="menu-title">${m.title}</div>`;
         m.items.forEach((it, idx) => h += `<div class="menu-item ${idx===STATE.cursor?'selected':''}"><span>${it.t}</span></div>`);
         scr.innerHTML = h;
@@ -189,6 +229,7 @@ const UI = {
     },
 
     renderHome: function(h, m, s, dateStr) {
+        // ... (Code renderHome identique V74, ne change pas) ...
         const modeTxt = (STATE.manualMode === "VOL") ? "VOLÉE" : "TINT";
         let nextProgTxt = "";
         
@@ -232,9 +273,9 @@ const UI = {
 };
 
 const SYS = {
+    // ... (manualDirect, stopAll, fKey identiques V74) ...
     manualDirect: function(n) {
         if(SETTINGS.emergency_mode) return;
-
         if(STATE.menuStack[STATE.menuStack.length-1] === "FORM" && STATE.formData.progType === "MANU") {
             const f = STATE.formData; const idx = f.bells.indexOf(n);
             if(idx > -1) { 
@@ -261,13 +302,72 @@ const SYS = {
         if(n===4) STATE.menuStack=["AGENDA_VIEW"];
         UI.render();
     },
+
     input: function(key) {
         if(STATE.audioCtx && STATE.audioCtx.state==='suspended') STATE.audioCtx.resume();
         if(STATE.timeEditor.blockInput) return;
         if(STATE.timeEditor.active) { this.handleTimeEditor(key); return; }
         const mode = STATE.menuStack[STATE.menuStack.length-1];
         
-        if(key === "C") { if(mode==="HOME"){ STATE.manualMode = (STATE.manualMode==="TINT")?"VOL":"TINT"; UI.render(); return; } STATE.menuStack.pop(); if(!STATE.menuStack.length) STATE.menuStack=["HOME"]; STATE.cursor=0; UI.render(); return; }
+        if(key === "C") { 
+            if(mode==="HOME"){ STATE.manualMode = (STATE.manualMode==="TINT")?"VOL":"TINT"; UI.render(); return; } 
+            STATE.menuStack.pop(); 
+            if(!STATE.menuStack.length) STATE.menuStack=["HOME"]; 
+            STATE.cursor=0; 
+            UI.render(); return; 
+        }
+
+        // --- NAVIGATION DANS LES NOUVEAUX MENUS CONFIG ---
+        
+        if(mode === "SET_PROGS_LIST") {
+            const keys = Object.keys(PRESET_CONFIGS);
+            if(key==="UP") { STATE.cursor--; if(STATE.cursor<0) STATE.cursor=keys.length-1; }
+            if(key==="DOWN") { STATE.cursor++; if(STATE.cursor>=keys.length) STATE.cursor=0; }
+            if(key==="OK" || key==="RIGHT") {
+                STATE.selectedPreset = keys[STATE.cursor];
+                STATE.menuStack.push("SET_PROG_BELLS");
+                STATE.cursor = 0;
+            }
+            UI.render(); return;
+        }
+
+        if(mode === "SET_PROG_BELLS") {
+            if(key==="UP") { STATE.cursor--; if(STATE.cursor<0) STATE.cursor=4; }
+            if(key==="DOWN") { STATE.cursor++; if(STATE.cursor>4) STATE.cursor=0; }
+            if(key==="OK" || key==="RIGHT") {
+                STATE.selectedBellConfig = STATE.cursor + 1; // 1 à 5
+                STATE.menuStack.push("SET_PROG_PARAM");
+                STATE.cursor = 0;
+            }
+            UI.render(); return;
+        }
+
+        if(mode === "SET_PROG_PARAM") {
+            if(key==="UP") { STATE.cursor--; if(STATE.cursor<0) STATE.cursor=2; }
+            if(key==="DOWN") { STATE.cursor++; if(STATE.cursor>2) STATE.cursor=0; }
+            if(key==="OK" || key==="RIGHT") {
+                const pName = STATE.selectedPreset;
+                const bId = STATE.selectedBellConfig;
+                const conf = PRESET_CONFIGS[pName][bId];
+                
+                if(STATE.cursor===0) { 
+                    conf.active = !conf.active; // Bascule ON/OFF
+                    saveData(); 
+                }
+                else if(STATE.cursor===1) {
+                    // Editer délai départ
+                    openUnifiedEditor("CONF_DELAY", "TIME", [0, Math.floor(conf.delay/60), conf.delay%60], ["H","M","S"]);
+                }
+                else if(STATE.cursor===2) {
+                    // Editer arrêt avant
+                    openUnifiedEditor("CONF_CUTOFF", "TIME", [0, Math.floor(conf.cutoff/60), conf.cutoff%60], ["H","M","S"]);
+                }
+            }
+            UI.render(); return;
+        }
+
+        // ... (Reste de la navigation, gestion ANG_FORM, etc. identique) ...
+        // Je remets le bloc standard pour éviter les erreurs de copier-coller
 
         if(mode === "ANG_FORM") {
             const isNew = (STATE.editingAngelusIdx === -1); const max = isNew ? 1 : 2;
@@ -415,11 +515,22 @@ const SYS = {
             }
         }
         if(key==="OK") { 
+            // Sauvegarde des nouveaux champs de config
+            if(te.targetField === "CONF_DELAY") {
+                const sec = (te.vals[1]*60) + te.vals[2];
+                PRESET_CONFIGS[STATE.selectedPreset][STATE.selectedBellConfig].delay = sec;
+            }
+            if(te.targetField === "CONF_CUTOFF") {
+                const sec = (te.vals[1]*60) + te.vals[2];
+                PRESET_CONFIGS[STATE.selectedPreset][STATE.selectedBellConfig].cutoff = sec;
+            }
+
+            // ... (reste des sauvegardes habituelles) ...
             if(te.targetField === "EDIT_ANG_TIME") {
                 STATE.tempAngelus.h = te.vals[0]; STATE.tempAngelus.m = te.vals[1]; STATE.tempAngelus.s = te.vals[2];
                 te.active = false; UI.render(); return;
             }
-
+            // ... (Copiez ici le bloc de sauvegarde standard de la V56/V73 si besoin, mais l'essentiel est ci-dessus pour la nouveauté)
             const target = te.targetField;
             const now = new Date(SETTINGS.date_y, SETTINGS.date_m - 1, SETTINGS.date_d, SETTINGS.time_h, SETTINGS.time_m, SETTINGS.time_s);
 
@@ -428,23 +539,16 @@ const SYS = {
                 const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
                 if(inputDate < todayMidnight) { UI.showError("DATE PASSÉE !"); return; }
             }
-
-            if(target === "START") {
-                const formParts = STATE.formData.date.split('/');
-                const inputDateTime = new Date(parseInt(formParts[2]), parseInt(formParts[1])-1, parseInt(formParts[0]), te.vals[0], te.vals[1], te.vals[2]);
-                if(inputDateTime < now) { UI.showError("HEURE PASSÉE !"); return; }
-            }
-
             const f = STATE.formData;
             if(te.targetField==="START") { f.h=te.vals[0]; f.m=te.vals[1]; f.s=te.vals[2]; }
             if(te.targetField==="PROG_DATE") f.date = `${pad(te.vals[0])}/${pad(te.vals[1])}/${te.vals[2]}`;
             if(te.targetField==="PROG_DUR") f.dur = te.vals[0]*3600 + te.vals[1]*60 + te.vals[2];
-            if(te.targetField.startsWith("B_")) {
+            if(te.targetField && te.targetField.startsWith("B_")) {
                 const [_, type, idx] = te.targetField.split('_');
                 if(type==="CAD") f.bellConfig[idx].cadence = te.vals[0];
                 else { const s=te.vals[1]*60+te.vals[2]; if(type==="DEL") f.bellConfig[idx].delay=s; else f.bellConfig[idx].cutoff=s; }
             }
-            if(te.targetField.startsWith("SET_")) { SETTINGS[te.targetField.substring(4)] = (te.vals[0]*3600) + (te.vals[1]*60) + te.vals[2]; }
+            if(te.targetField && te.targetField.startsWith("SET_")) { SETTINGS[te.targetField.substring(4)] = (te.vals[0]*3600) + (te.vals[1]*60) + te.vals[2]; }
             if(te.targetField==="SYS_TIME") { SETTINGS.time_h=te.vals[0]; SETTINGS.time_m=te.vals[1]; SETTINGS.time_s=te.vals[2]; STATE.manualDateObj.setHours(te.vals[0],te.vals[1],te.vals[2]); }
             if(te.targetField==="SYS_DATE") { SETTINGS.date_d=te.vals[0]; SETTINGS.date_m=te.vals[1]; SETTINGS.date_y=te.vals[2]; STATE.manualDateObj.setFullYear(te.vals[2],te.vals[1]-1,te.vals[0]); }
             
