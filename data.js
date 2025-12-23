@@ -1,43 +1,42 @@
 // =============================================================================
-// DATA.JS - CONFIGURATION (V76 - MAJ CLOCHE 1)
+// DATA.JS - CONFIGURATION (V77 - MAJ DERNIERE CLOCHE / CLOCHE 5)
 // =============================================================================
 
 const BELL_PARAMS = { 
-    // cutTime: 0.15s (Arrêt net et propre pour toutes les cloches)
+    // cutTime: 0.15s (Arrêt net et propre pour éviter le double coup)
     
-    // CLOCHE 1 (Volée ~57s) - Dossier Cloche 2
+    // CLOCHE 1 (Volée ~57s)
     1: { name: "Cloche 1 (57s)", overlap: 0.200, cutTime: 0.15 }, 
     
-    // CLOCHE 2 (Volée ~111s) - Dossier Cloche 3
+    // CLOCHE 2 (Volée ~111s)
     2: { name: "Cloche 2 (1m51)", overlap: 0.200, cutTime: 0.15 }, 
     
-    // CLOCHE 3 (Volée ~107s) - Dossier Cloche 4
+    // CLOCHE 3 (Volée ~107s)
     3: { name: "Cloche 3 (1m47)", overlap: 0.200, cutTime: 0.15 }, 
     
-    // CLOCHE 4 (Volée ~110s) - Dossier Cloche 5
+    // CLOCHE 4 (Volée ~110s)
     4: { name: "Cloche 4 (1m50)", overlap: 0.200, cutTime: 0.15 }, 
     
-    // CLOCHE 5 (Volée ~120s) - Dossier Cloche 6
-    5: { name: "Cloche 5 (2m00)", overlap: 0.200, cutTime: 0.15 } 
+    // CLOCHE 5 (Mise à jour : Volée ~111s / 1m51)
+    5: { name: "Cloche 5 (1m51)", overlap: 0.200, cutTime: 0.15 } 
 };
 
 const AUDIO_FILES = {
     // RAPPEL DE L'ORGANISATION DES DOSSIERS
-    // Le système cherche dedans : debut.mp3, volee.mp3, fin.mp3, tintement.mp3
     
-    // Bouton 1 (Votre nouvelle cloche)
+    // Bouton 1 -> Dossier Cloche 2
     1: "Sons/Cloche 2/",  
     
-    // Bouton 2
+    // Bouton 2 -> Dossier Cloche 3
     2: "Sons/Cloche 3/",  
     
-    // Bouton 3
+    // Bouton 3 -> Dossier Cloche 4
     3: "Sons/Cloche 4/",  
     
-    // Bouton 4
+    // Bouton 4 -> Dossier Cloche 5
     4: "Sons/Cloche 5/",  
     
-    // Bouton 5
+    // Bouton 5 -> Dossier Cloche 6 (Celle que vous venez de modifier)
     5: "Sons/Cloche 6/"   
 };
 
