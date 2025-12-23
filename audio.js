@@ -1,5 +1,5 @@
 // =============================================================================
-// AUDIO.JS - MOTEUR AUDIO (V71 - CHARGEMENT SIMPLIFIE)
+// AUDIO.JS - MOTEUR AUDIO (V78 - CROSSFADE & ANTI-CLICK)
 // =============================================================================
 
 class BellEngine {
@@ -15,16 +15,12 @@ class BellEngine {
 
     async load() {
         try { 
-            // On récupère le dossier (ex: "Sons/Cloche 2/")
             const folder = AUDIO_FILES[this.id];
-            
-            // On charge les 4 fichiers standardisés
             this.buffers.tint  = await this._fetch(folder + 'tintement.mp3');
             this.buffers.debut = await this._fetch(folder + 'debut.mp3');
             this.buffers.volee = await this._fetch(folder + 'volee.mp3');
             this.buffers.fin   = await this._fetch(folder + 'fin.mp3');
-            
-        } catch(e) { console.log("Audio manquant ou erreur cloche " + this.id, e); }
+        } catch(e) { console.log("Err audio cloche " + this.id, e); }
     }
 
     async _fetch(url) {
@@ -32,14 +28,16 @@ class BellEngine {
         return await STATE.audioCtx.decodeAudioData(b);
     }
 
+    // TINTEMENT : Simple, pas de mélange complexe
     tinte() {
         if(this.isSwinging) return;
         this._chkCtx();
         updateRelay(this.id, true); 
         setTimeout(() => updateRelay(this.id, false), 200);
-        if(this.buffers.tint) this._playOneShot(this.buffers.tint);
+        if(this.buffers.tint) this._playSimple(this.buffers.tint);
     }
 
+    // DÉMARRAGE VOLÉE
     startVolley() {
         if(this.isSwinging) return;
         this._chkCtx();
@@ -56,30 +54,50 @@ class BellEngine {
         }
     }
 
+    // ARRÊT VOLÉE (La partie critique)
     stopVolley() { 
         if(!this.isSwinging) return;
         
+        // 1. On annule la prochaine boucle prévue
         if(this.nextLoopTimer) clearTimeout(this.nextLoopTimer);
         this.isSwinging = false;
 
-        // Lancement immédiat de la fin
+        const now = STATE.audioCtx.currentTime;
+        
+        // 2. LANCEMENT DE LA FIN (Avec FADE IN)
+        // Le fade in (0.8s) permet de masquer l'attaque si elle tombe mal
         if(this.buffers.fin) {
-            this._playOneShot(this.buffers.fin);
+            const fadeInTime = BELL_PARAMS[this.id].fadeIn || 0.5;
+            
+            const s = STATE.audioCtx.createBufferSource();
+            const g = STATE.audioCtx.createGain();
+            s.buffer = this.buffers.fin;
+            s.connect(g);
+            g.connect(STATE.audioCtx.destination);
+            
+            // On part de 0 et on monte le volume
+            g.gain.setValueAtTime(0, now);
+            g.gain.linearRampToValueAtTime(1, now + fadeInTime);
+            
+            s.start(now);
         }
 
-        // Coupure rapide de la volée (cutTime)
-        const cutTime = BELL_PARAMS[this.id].cutTime || 0.15;
+        // 3. ARRÊT DE LA VOLÉE EN COURS (Avec FADE OUT)
+        // On la laisse "mourir" doucement (1.5s)
+        const fadeOutTime = BELL_PARAMS[this.id].fadeOut || 1.0;
         
         if(this.activeGain) {
             try {
-                const now = STATE.audioCtx.currentTime;
+                // On fige la valeur actuelle pour éviter un saut
                 this.activeGain.gain.cancelScheduledValues(now);
                 this.activeGain.gain.setValueAtTime(this.activeGain.gain.value, now);
-                this.activeGain.gain.linearRampToValueAtTime(0, now + cutTime);
+                // Descente progressive vers 0
+                this.activeGain.gain.linearRampToValueAtTime(0, now + fadeOutTime);
             } catch(e) {}
             
+            // On coupe réellement le moteur un peu après
             const oldSource = this.activeSource;
-            setTimeout(() => { if(oldSource) try{oldSource.stop();}catch(e){} }, cutTime * 1000 + 50);
+            setTimeout(() => { if(oldSource) try{oldSource.stop();}catch(e){} }, fadeOutTime * 1000 + 100);
         }
 
         this.activeSource = null;
@@ -89,6 +107,7 @@ class BellEngine {
         if(btn) btn.classList.remove('ringing');
     }
 
+    // Gestion de la séquence Début -> Volée -> Volée...
     _playSequence(type) {
         if(!this.isSwinging) return;
 
@@ -102,14 +121,34 @@ class BellEngine {
         source.connect(gainNode);
         gainNode.connect(STATE.audioCtx.destination);
         
+        // MICRO FADE-IN ANTI-CLICK au démarrage du fichier
+        // Même si le fichier est propre, on met 10ms de fade in pour éviter le "tique" numérique
+        const now = STATE.audioCtx.currentTime;
+        gainNode.gain.setValueAtTime(0, now);
+        gainNode.gain.linearRampToValueAtTime(1, now + 0.05); // 50ms de fade in
+
         this.activeSource = source;
         this.activeGain = gainNode;
 
-        source.start(0);
+        source.start(now);
 
-        const overlap = BELL_PARAMS[this.id].overlap || 0.1;
+        // Calcul du temps avant la suite
+        // On utilise l'overlap défini dans data.js (ex: 1.0s)
+        const overlap = BELL_PARAMS[this.id].overlap || 0.5;
         const duration = buf.duration;
+        
+        // Temps avant de lancer la prochaine boucle
+        // Le prochain son partira AVANT la fin de celui-ci (crossfade)
         const timeToNext = (duration - overlap) * 1000;
+
+        // On planifie aussi le fade-out de CE fichier quand le prochain démarrera
+        // pour que la transition soit fluide
+        setTimeout(() => {
+            if(this.activeGain === gainNode) { // Si c'est toujours le gain actif
+                 // On ne fait rien ici, le fade out naturel du fichier suffit souvent si overlap est bon
+                 // Mais on pourrait ajouter un fade out ici si besoin.
+            }
+        }, timeToNext);
 
         this.nextLoopTimer = setTimeout(() => {
             if(this.isSwinging) {
@@ -118,10 +157,12 @@ class BellEngine {
         }, timeToNext);
     }
 
-    _playOneShot(buf) {
+    _playSimple(buf) {
         const s = STATE.audioCtx.createBufferSource(); 
+        const g = STATE.audioCtx.createGain();
         s.buffer = buf; 
-        s.connect(STATE.audioCtx.destination); 
+        s.connect(g); 
+        g.connect(STATE.audioCtx.destination);
         s.start(0);
     }
 

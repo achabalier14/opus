@@ -1,43 +1,28 @@
 // =============================================================================
-// DATA.JS - CONFIGURATION (V77 - MAJ DERNIERE CLOCHE / CLOCHE 5)
+// DATA.JS - CONFIGURATION (V78 - TRANSITIONS LISSÉES "HEAVY")
 // =============================================================================
 
 const BELL_PARAMS = { 
-    // cutTime: 0.15s (Arrêt net et propre pour éviter le double coup)
+    // overlap : Temps de mélange entre "Début" et "Volée" (Augmenté pour éviter le clic).
+    // fadeOut : Temps pour éteindre la volée quand on appuie sur STOP.
+    // fadeIn  : Temps pour faire apparaître la FIN (masque le double coup).
     
-    // CLOCHE 1 (Volée ~57s)
-    1: { name: "Cloche 1 (57s)", overlap: 0.200, cutTime: 0.15 }, 
+    // Pour toutes vos grosses cloches (fichiers longs), on utilise des valeurs larges :
     
-    // CLOCHE 2 (Volée ~111s)
-    2: { name: "Cloche 2 (1m51)", overlap: 0.200, cutTime: 0.15 }, 
-    
-    // CLOCHE 3 (Volée ~107s)
-    3: { name: "Cloche 3 (1m47)", overlap: 0.200, cutTime: 0.15 }, 
-    
-    // CLOCHE 4 (Volée ~110s)
-    4: { name: "Cloche 4 (1m50)", overlap: 0.200, cutTime: 0.15 }, 
-    
-    // CLOCHE 5 (Mise à jour : Volée ~111s / 1m51)
-    5: { name: "Cloche 5 (1m51)", overlap: 0.200, cutTime: 0.15 } 
+    1: { name: "Bourdon",        overlap: 1.0, fadeOut: 1.5, fadeIn: 0.8 }, 
+    2: { name: "Cloche 2 (1m51)", overlap: 1.0, fadeOut: 1.5, fadeIn: 0.8 }, 
+    3: { name: "Cloche 3 (1m47)", overlap: 1.0, fadeOut: 1.5, fadeIn: 0.8 }, 
+    4: { name: "Cloche 4 (1m50)", overlap: 1.0, fadeOut: 1.5, fadeIn: 0.8 }, 
+    5: { name: "Cloche 5 (2m00)", overlap: 1.0, fadeOut: 1.5, fadeIn: 0.8 } 
 };
 
 const AUDIO_FILES = {
-    // RAPPEL DE L'ORGANISATION DES DOSSIERS
-    
-    // Bouton 1 -> Dossier Cloche 2
-    1: "Sons/Cloche 2/",  
-    
-    // Bouton 2 -> Dossier Cloche 3
-    2: "Sons/Cloche 3/",  
-    
-    // Bouton 3 -> Dossier Cloche 4
-    3: "Sons/Cloche 4/",  
-    
-    // Bouton 4 -> Dossier Cloche 5
-    4: "Sons/Cloche 5/",  
-    
-    // Bouton 5 -> Dossier Cloche 6 (Celle que vous venez de modifier)
-    5: "Sons/Cloche 6/"   
+    // RAPPEL DES DOSSIERS (Ne change pas)
+    1: "Sons/Cloche 2/",
+    2: "Sons/Cloche 3/",
+    3: "Sons/Cloche 4/",
+    4: "Sons/Cloche 5/",
+    5: "Sons/Cloche 6/"
 };
 
 let SETTINGS = {
