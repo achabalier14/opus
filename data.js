@@ -1,23 +1,22 @@
 // =============================================================================
-// DATA.JS - CONFIGURATION (V78 - TRANSITIONS LISSÉES "HEAVY")
+// DATA.JS - CONFIGURATION (V79 - TRANSITION DEBUT/VOLEE LISSÉE)
 // =============================================================================
 
 const BELL_PARAMS = { 
-    // overlap : Temps de mélange entre "Début" et "Volée" (Augmenté pour éviter le clic).
-    // fadeOut : Temps pour éteindre la volée quand on appuie sur STOP.
-    // fadeIn  : Temps pour faire apparaître la FIN (masque le double coup).
-    
-    // Pour toutes vos grosses cloches (fichiers longs), on utilise des valeurs larges :
-    
-    1: { name: "Bourdon",        overlap: 1.0, fadeOut: 1.5, fadeIn: 0.8 }, 
-    2: { name: "Cloche 2 (1m51)", overlap: 1.0, fadeOut: 1.5, fadeIn: 0.8 }, 
-    3: { name: "Cloche 3 (1m47)", overlap: 1.0, fadeOut: 1.5, fadeIn: 0.8 }, 
-    4: { name: "Cloche 4 (1m50)", overlap: 1.0, fadeOut: 1.5, fadeIn: 0.8 }, 
-    5: { name: "Cloche 5 (2m00)", overlap: 1.0, fadeOut: 1.5, fadeIn: 0.8 } 
+    // overlap   : Temps de mélange entre les fichiers.
+    // fadeOut   : Temps pour éteindre la volée à l'arrêt.
+    // fadeIn    : Temps pour faire apparaître la FIN (masque le double coup d'arrêt).
+    // volFadeIn : NOUVEAU ! Temps pour faire apparaître la VOLÉE après le début.
+    //             Permet de masquer le premier "BONG" de la boucle s'il tape en double.
+
+    1: { name: "Bourdon",        overlap: 1.0, fadeOut: 1.5, fadeIn: 0.8, volFadeIn: 0.5 }, 
+    2: { name: "Cloche 2 (1m51)", overlap: 1.0, fadeOut: 1.5, fadeIn: 0.8, volFadeIn: 0.8 }, 
+    3: { name: "Cloche 3 (1m47)", overlap: 1.0, fadeOut: 1.5, fadeIn: 0.8, volFadeIn: 0.8 }, 
+    4: { name: "Cloche 4 (1m50)", overlap: 1.0, fadeOut: 1.5, fadeIn: 0.8, volFadeIn: 0.8 }, 
+    5: { name: "Cloche 5 (2m00)", overlap: 1.0, fadeOut: 1.5, fadeIn: 0.8, volFadeIn: 0.8 } 
 };
 
 const AUDIO_FILES = {
-    // RAPPEL DES DOSSIERS (Ne change pas)
     1: "Sons/Cloche 2/",
     2: "Sons/Cloche 3/",
     3: "Sons/Cloche 4/",
@@ -45,14 +44,8 @@ let SETTINGS = {
     night_start_h: 22, night_start_m: 0, 
     night_end_h: 7, night_end_m: 0,
     
-    dur_angelus: 30,   
-    dur_messe: 180,    
-    dur_mariage: 180,  
-    dur_plenum: 300,   
-    dur_bapteme: 180,  
-    dur_glas: 300,     
-    dur_tedeum: 180,   
-    dur_tocsin: 180    
+    dur_angelus: 30, dur_messe: 180, dur_mariage: 180, dur_plenum: 300,   
+    dur_bapteme: 180, dur_glas: 300, dur_tedeum: 180, dur_tocsin: 180    
 };
 
 const PRESET_NAMES = ["MESSE", "MARIAGE", "BAPTEME", "ANGELUS", "GLAS", "PLENUM", "GLAS_H", "GLAS_F", "TE_DEUM", "TOCSIN"];

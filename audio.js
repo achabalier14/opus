@@ -1,5 +1,5 @@
 // =============================================================================
-// AUDIO.JS - MOTEUR AUDIO (V78 - CROSSFADE & ANTI-CLICK)
+// AUDIO.JS - MOTEUR AUDIO (V79 - DOUBLE FADE DEBUT/FIN)
 // =============================================================================
 
 class BellEngine {
@@ -28,7 +28,6 @@ class BellEngine {
         return await STATE.audioCtx.decodeAudioData(b);
     }
 
-    // TINTEMENT : Simple, pas de mélange complexe
     tinte() {
         if(this.isSwinging) return;
         this._chkCtx();
@@ -37,7 +36,6 @@ class BellEngine {
         if(this.buffers.tint) this._playSimple(this.buffers.tint);
     }
 
-    // DÉMARRAGE VOLÉE
     startVolley() {
         if(this.isSwinging) return;
         this._chkCtx();
@@ -47,6 +45,7 @@ class BellEngine {
         const btn = document.getElementById('btn-'+this.id);
         if(btn) btn.classList.add('ringing');
         
+        // On démarre la séquence par le début (sans fade in spécial, juste le micro anti-click)
         if(this.buffers.debut) {
             this._playSequence('debut');
         } else {
@@ -54,18 +53,15 @@ class BellEngine {
         }
     }
 
-    // ARRÊT VOLÉE (La partie critique)
     stopVolley() { 
         if(!this.isSwinging) return;
         
-        // 1. On annule la prochaine boucle prévue
         if(this.nextLoopTimer) clearTimeout(this.nextLoopTimer);
         this.isSwinging = false;
 
         const now = STATE.audioCtx.currentTime;
         
-        // 2. LANCEMENT DE LA FIN (Avec FADE IN)
-        // Le fade in (0.8s) permet de masquer l'attaque si elle tombe mal
+        // FADE IN SUR LA FIN (Pour masquer l'attaque)
         if(this.buffers.fin) {
             const fadeInTime = BELL_PARAMS[this.id].fadeIn || 0.5;
             
@@ -75,27 +71,22 @@ class BellEngine {
             s.connect(g);
             g.connect(STATE.audioCtx.destination);
             
-            // On part de 0 et on monte le volume
             g.gain.setValueAtTime(0, now);
             g.gain.linearRampToValueAtTime(1, now + fadeInTime);
             
             s.start(now);
         }
 
-        // 3. ARRÊT DE LA VOLÉE EN COURS (Avec FADE OUT)
-        // On la laisse "mourir" doucement (1.5s)
+        // FADE OUT SUR LA VOLÉE EN COURS
         const fadeOutTime = BELL_PARAMS[this.id].fadeOut || 1.0;
         
         if(this.activeGain) {
             try {
-                // On fige la valeur actuelle pour éviter un saut
                 this.activeGain.gain.cancelScheduledValues(now);
                 this.activeGain.gain.setValueAtTime(this.activeGain.gain.value, now);
-                // Descente progressive vers 0
                 this.activeGain.gain.linearRampToValueAtTime(0, now + fadeOutTime);
             } catch(e) {}
             
-            // On coupe réellement le moteur un peu après
             const oldSource = this.activeSource;
             setTimeout(() => { if(oldSource) try{oldSource.stop();}catch(e){} }, fadeOutTime * 1000 + 100);
         }
@@ -107,8 +98,8 @@ class BellEngine {
         if(btn) btn.classList.remove('ringing');
     }
 
-    // Gestion de la séquence Début -> Volée -> Volée...
-    _playSequence(type) {
+    // GESTION DES SEQUENCES AVEC FADE SPECIFIQUE
+    _playSequence(type, customFadeIn = 0) {
         if(!this.isSwinging) return;
 
         const buf = (type === 'debut') ? this.buffers.debut : this.buffers.volee;
@@ -121,38 +112,37 @@ class BellEngine {
         source.connect(gainNode);
         gainNode.connect(STATE.audioCtx.destination);
         
-        // MICRO FADE-IN ANTI-CLICK au démarrage du fichier
-        // Même si le fichier est propre, on met 10ms de fade in pour éviter le "tique" numérique
         const now = STATE.audioCtx.currentTime;
+        
+        // CALCUL DU FADE IN
+        // Si customFadeIn est demandé (transition debut->volee), on l'utilise
+        // Sinon, on met juste un micro fade (0.05s) pour éviter le clic numérique
+        const fadeDuration = (customFadeIn > 0) ? customFadeIn : 0.05;
+        
         gainNode.gain.setValueAtTime(0, now);
-        gainNode.gain.linearRampToValueAtTime(1, now + 0.05); // 50ms de fade in
+        gainNode.gain.linearRampToValueAtTime(1, now + fadeDuration);
 
         this.activeSource = source;
         this.activeGain = gainNode;
 
         source.start(now);
 
-        // Calcul du temps avant la suite
-        // On utilise l'overlap défini dans data.js (ex: 1.0s)
         const overlap = BELL_PARAMS[this.id].overlap || 0.5;
         const duration = buf.duration;
-        
-        // Temps avant de lancer la prochaine boucle
-        // Le prochain son partira AVANT la fin de celui-ci (crossfade)
         const timeToNext = (duration - overlap) * 1000;
 
-        // On planifie aussi le fade-out de CE fichier quand le prochain démarrera
-        // pour que la transition soit fluide
-        setTimeout(() => {
-            if(this.activeGain === gainNode) { // Si c'est toujours le gain actif
-                 // On ne fait rien ici, le fade out naturel du fichier suffit souvent si overlap est bon
-                 // Mais on pourrait ajouter un fade out ici si besoin.
-            }
-        }, timeToNext);
-
+        // PREPARATION DE LA SUITE
         this.nextLoopTimer = setTimeout(() => {
             if(this.isSwinging) {
-                this._playSequence('volee'); 
+                // Si on vient de jouer 'debut', la prochaine est 'volee' AVEC UN FADE IN SPECIAL
+                if(type === 'debut') {
+                    // On récupère le paramètre volFadeIn de data.js
+                    const vFade = BELL_PARAMS[this.id].volFadeIn || 0.5;
+                    this._playSequence('volee', vFade);
+                } else {
+                    // Si on est déjà dans 'volee', on boucle normalement (juste anti-click)
+                    this._playSequence('volee', 0);
+                }
             }
         }, timeToNext);
     }
