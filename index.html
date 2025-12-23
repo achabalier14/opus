@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Bodet OPUS - Master Control V57</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="boot-overlay" onclick="startSystem()">
+        <div class="boot-box">
+            <h1>OPUS MASTER</h1>
+            <p>Toucher pour Démarrer</p>
+        </div>
+    </div>
+
+    <div class="opus-case">
+        <button class="urgency-btn-phys" onclick="UI.toggleEmergency()">
+            <div class="urgency-cap"></div>
+            <span>ARRET<br>URGENCE</span>
+        </button>
+
+        <div class="header-row">
+            <div class="brand">Bodet <span style="font-style:normal; font-size:0.6em;">Sigma</span></div>
+        </div>
+
+        <div class="main-interface">
+            <div class="f-keys">
+                <button class="btn-f" onclick="SYS.fKey(1)">F1<br>⚙️<br><small>MENU</small></button>
+                <button class="btn-f" onclick="SYS.fKey(2)">F2<br>➕<br><small>PROG</small></button>
+                <button class="btn-f" onclick="SYS.fKey(3)">F3<br>🖐️<br><small>MANU</small></button>
+                <button class="btn-f" onclick="SYS.fKey(4)">F4<br>📅<br><small>AGENDA</small></button>
+            </div>
+
+            <div class="lcd-frame">
+                <div class="lcd-screen">
+                    <div class="screen-header">
+                        <span id="lcd-date-time">--/-- --:--:--</span>
+                        <span id="lcd-icons">🔔 AUTO</span>
+                    </div>
+                    <div id="alert-banner" class="alert-banner" style="display:none;">⚠️ ARRET URGENCE - SONNERIE BLOQUÉE ⚠️</div>
+                    
+                    <div class="screen-body" id="screen-content"></div>
+                    <div class="screen-footer" id="screen-footer">PRET.</div>
+                </div>
+            </div>
+
+            <div class="nav-section">
+                <div class="d-pad">
+                    <button class="d-btn d-up" onclick="SYS.input('UP')">▲</button>
+                    <button class="d-btn d-left" onclick="SYS.input('LEFT')">◀</button>
+                    <button class="d-btn d-right" onclick="SYS.input('RIGHT')">▶</button>
+                    <button class="d-btn d-down" onclick="SYS.input('DOWN')">▼</button>
+                </div>
+                <div class="action-btns">
+                    <button class="btn-round btn-c" onclick="SYS.input('C')">❌</button>
+                    <button class="btn-round btn-ok" onclick="SYS.input('OK')">✔️</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="bottom-section">
+            <button class="bell-key" id="btn-1" onmousedown="SYS.manualDirect(1)">
+                <span>1</span><span style="font-size:1.2rem">🔔</span>
+                <span id="rel-1" class="relay-led in-btn"></span>
+            </button>
+            
+            <button class="bell-key" id="btn-2" onmousedown="SYS.manualDirect(2)">
+                <span>2</span><span style="font-size:1.2rem">🔔</span>
+                <span id="rel-2" class="relay-led in-btn"></span>
+            </button>
+            
+            <button class="bell-key" id="btn-3" onmousedown="SYS.manualDirect(3)">
+                <span>3</span><span style="font-size:1.2rem">🔔</span>
+                <span id="rel-3" class="relay-led in-btn"></span>
+            </button>
+            
+            <button class="bell-key" id="btn-4" onmousedown="SYS.manualDirect(4)">
+                <span>4</span><span style="font-size:1.2rem">🔔</span>
+                <span id="rel-4" class="relay-led in-btn"></span>
+            </button>
+
+            <button class="bell-key" id="btn-5" onmousedown="SYS.manualDirect(5)">
+                <span>5</span><span style="font-size:1.2rem">🔔</span>
+                <span id="rel-5" class="relay-led in-btn"></span>
+            </button>
+            
+            <button class="bell-key stop-key" onclick="SYS.stopAll()"><span>⛔</span><small>STOP</small></button>
+        </div>
+    </div>
+
+    <script src="data.js"></script>
+    <script src="audio.js"></script>
+    <script src="ui.js"></script>
+    <script src="main.js"></script>
+
+    <script>
+        function startSystem() {
+            if(typeof INIT_SYSTEM === 'function') {
+                INIT_SYSTEM();
+                document.getElementById('boot-overlay').style.display = 'none';
+            } else {
+                alert("Erreur critique : Fichiers JS manquants.");
+            }
+        }
+    </script>
+</body>
+</html>
