@@ -280,49 +280,38 @@ const SYS = {
     },
     stopAll: () => AUDIO.stopAll(),
     
-    // CORRECTION F2/F3 : Heure réelle + Nom "Sonnerie manuel"
+ // CORRECTION F2/F3 : Heure réelle + Nom par défaut simple
     fKey: function(n) {
         STATE.editingIndex = -1; STATE.cursor = 0; STATE.timeEditor.active = false;
         
-        // 1. Calcul de l'heure exacte (basée sur l'affichage réel)
+        // 1. Calcul de l'heure exacte
         let nowH, nowM;
         if(SETTINGS.clock_mode === "AUTO") {
             const d = new Date();
             nowH = d.getHours(); nowM = d.getMinutes();
         } else {
-            // En mode manuel, on prend l'heure qui est affichée (celle de l'objet de simulation)
             nowH = STATE.manualDateObj.getHours(); 
             nowM = STATE.manualDateObj.getMinutes();
         }
         
-        // 2. On ajoute 1 minute
+        // 2. On ajoute 1 minute par défaut
         let defM = nowM + 1;
         let defH = nowH;
         if(defM > 59) { defM = 0; defH++; if(defH > 23) defH = 0; }
         
-        // 3. Générateur de nom unique "Sonnerie manuel X"
-        const getUniqueName = () => {
-            let count = 1;
-            const base = "Sonnerie manuelle"; 
-            const exists = (c) => SCHEDULE.some(e => e.name === `${base} ${c}`) || LIBRARY.some(e => e.name === `${base} ${c}`);
-            
-            while(exists(count)) { count++; }
-            
-            return `${base} ${count}`;
-        };
         if(n===1) STATE.menuStack=["MAIN"];
         
         if(n===2) { 
             // PRESET (F2) 
             loadEventToForm({
                 type:"PRESET", progType:"PRESET", 
-                name: getUniqueName(), // Nom "Sonnerie manuel X"
+                name: "Programmation", // Nom par défaut simple
                 presetName:"MESSE", 
                 bells:[1,2,3], 
-                dur: SETTINGS.dur_messe, // DUREE PAR DEFAUT DE LA MESSE
+                dur: SETTINGS.dur_messe,
                 mode:"AUCUNE", 
                 date: getCurrentDateStr(), 
-                h: defH, m: defM, s: 0 // H+1 MIN
+                h: defH, m: defM, s: 0
             }, -1); 
             STATE.menuStack=["FORM"]; 
         }
@@ -331,13 +320,13 @@ const SYS = {
             // MANUAL (F3)
             loadEventToForm({
                 type:"MANUAL", progType:"MANU", 
-                name: getUniqueName(), // Nom "Sonnerie manuel X"
+                name: "Sonnerie manuelle", // ICI : Juste le texte, pas de calcul de chiffre
                 typeAudio: "VOL", 
                 bells:[], bellConfig: [], 
                 dur: 60, 
                 mode:"AUCUNE", 
                 date: getCurrentDateStr(), 
-                h: defH, m: defM, s: 0 // H+1 MIN
+                h: defH, m: defM, s: 0
             }, -1); 
             STATE.menuStack=["FORM"]; 
         }
