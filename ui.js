@@ -303,12 +303,13 @@ const SYS = {
         // 3. Générateur de nom unique "Sonnerie manuel X"
         const getUniqueName = () => {
             let count = 1;
-            const base = "Sonnerie manuel";
+            const base = "Sonnerie manuelle"; 
             const exists = (c) => SCHEDULE.some(e => e.name === `${base} ${c}`) || LIBRARY.some(e => e.name === `${base} ${c}`);
+            
             while(exists(count)) { count++; }
+            
             return `${base} ${count}`;
         };
-
         if(n===1) STATE.menuStack=["MAIN"];
         
         if(n===2) { 
