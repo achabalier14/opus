@@ -1,11 +1,10 @@
 // =============================================================================
-// MAIN.JS - LOGIQUE PRINCIPALE (V83 - COMPLET & DEFINITIF)
+// MAIN.JS - MOTEUR V103 (COMPLET AVEC BOUCLES & PARALLELISME)
 // =============================================================================
 
 async function INIT_SYSTEM() {
     STATE.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const p = []; 
-    // On charge les 5 cloches
     for(let i=1; i<=5; i++) { 
         STATE.engines[i] = new BellEngine(i); 
         p.push(STATE.engines[i].load()); 
@@ -22,16 +21,15 @@ async function INIT_SYSTEM() {
         STATE.manualDateObj = new Date(SETTINGS.date_y, SETTINGS.date_m-1, SETTINGS.date_d, SETTINGS.time_h, SETTINGS.time_m, SETTINGS.time_s);
     }
 
-    // Reset des états au démarrage pour éviter le blocage
     STATE.isChiming = false;
     STATE.stopSignal = false;
+    STATE.lockedBells = [false, false, false, false, false, false];
 
     setInterval(TICK, 1000);
     UI.render();
 }
 
 function saveData() {
-    // On sauvegarde aussi les PRESET_CONFIGS (vos réglages de délais/cloches)
     const data = { schedule: SCHEDULE, library: LIBRARY, settings: SETTINGS, presets: PRESET_CONFIGS };
     localStorage.setItem("OPUS_DATA", JSON.stringify(data));
 }
@@ -43,24 +41,48 @@ function loadData() {
             const data = JSON.parse(json);
             SCHEDULE = data.schedule || [];
             LIBRARY = data.library || [];
-            
-            // Chargement des configs de programmes si elles existent
-            if(data.presets) {
-                PRESET_CONFIGS = {...PRESET_CONFIGS, ...data.presets};
-            }
+            if(data.presets) PRESET_CONFIGS = {...PRESET_CONFIGS, ...data.presets};
 
             if(data.settings) {
                 const s = data.settings;
-                SETTINGS = {...SETTINGS, ...s};
+                // Initialisation Timelines si absentes
+                if(!s.timelines) s.timelines = {};
                 
-                if(!SETTINGS.angelus_times) { 
-                    SETTINGS.angelus_times = [{h:8,m:3,s:0}, {h:12,m:3,s:0}, {h:19,m:3,s:0}]; 
-                } else {
-                    SETTINGS.angelus_times.forEach(ang => {
-                        if((ang.h === 8 || ang.h === 12 || ang.h === 19) && ang.m === 0) { ang.m = 3; }
+                // Migration des anciens presets vers le format Timeline
+                const stdProgs = ["MESSE", "MARIAGE", "BAPTEME", "PLENUM"];
+                stdProgs.forEach(prog => {
+                    if(!s.timelines[prog] && PRESET_CONFIGS[prog]) {
+                        let dur = s["dur_" + prog.toLowerCase()] || 180;
+                        let blkConfig = {};
+                        for(let i=1; i<=5; i++) { blkConfig[i] = {...PRESET_CONFIGS[prog][i]}; }
+                        s.timelines[prog] = [{
+                            type: "VOL",
+                            duration: dur,
+                            mode: "TIME",
+                            repeat: 1,
+                            volConfig: blkConfig,
+                            parallel: false
+                        }];
+                    }
+                });
+
+                // Assurer la compatibilité des champs
+                for(let key in s.timelines) {
+                    s.timelines[key].forEach(blk => {
+                        if(!blk.type) blk.type = "SEQ"; 
+                        if(blk.type === "VOL" && !blk.volConfig) {
+                            blk.volConfig = {1:{active:false},2:{active:false},3:{active:false},4:{active:false},5:{active:false}};
+                        }
+                        if(typeof blk.parallel === 'undefined') blk.parallel = false; 
+                        if(!blk.mode) blk.mode = "TIME";
+                        if(typeof blk.repeat === 'undefined') blk.repeat = 1;
                     });
                 }
-                if(SETTINGS.auto_h.int === undefined) SETTINGS.auto_h.int = 2.25;
+
+                SETTINGS = {...SETTINGS, ...s};
+                if(!SETTINGS.angelus_times) { 
+                    SETTINGS.angelus_times = [{h:8,m:3,s:0}, {h:12,m:3,s:0}, {h:19,m:3,s:0}]; 
+                }
             }
         } catch(e) { console.error("Err chargement", e); }
     }
@@ -85,11 +107,9 @@ function TICK() {
         SETTINGS.date_d=d; SETTINGS.date_m=mo; SETTINGS.date_y=y; 
     }
 
-    const dateStr = `${pad(d)}/${pad(mo)}/${y}`;
     const elTimeSmall = document.getElementById('lcd-date-time');
     if(elTimeSmall) elTimeSmall.innerText = `${getHeaderDateStr()} ${pad(h)}:${pad(m)}:${pad(s)}`;
     
-    // GESTION LED URGENCE
     const btnUrg = document.querySelector('.urgency-btn-phys');
     if(btnUrg) {
         if(SETTINGS.emergency_mode) btnUrg.classList.add('active'); 
@@ -100,13 +120,10 @@ function TICK() {
         UI.renderHome(h,m,s, getHomeDateStr());
     }
     
-    // --- SECURITE URGENCE ---
     if(SETTINGS.emergency_mode) return;
 
-    // --- COEUR DU SYSTEME ---
     if(!isEditing) { 
         if(s===0 && STATE.audioCtx && STATE.audioCtx.state === 'suspended') STATE.audioCtx.resume(); 
-        
         checkAutoChimes(h, m, s);
         checkSchedule(h, m, s, d, mo, y); 
     }
@@ -125,24 +142,21 @@ function checkAutoChimes(h, m, s) {
     if(isNight(h, m)) return;
     const secPastHour = m * 60 + s;
 
-    // ANGELUS (Prioritaire)
     SETTINGS.angelus_times.forEach(ang => {
         if(h === ang.h && m === ang.m && s === ang.s) {
             if(STATE.isChiming) AUDIO.stopAll(); 
-            setTimeout(() => execPreset("ANGELUS", SETTINGS.dur_angelus), 200);
+            setTimeout(() => execPreset("ANGELUS"), 200);
         }
     });
 
     if(STATE.isChiming) return;
 
-    // HEURES / DEMIES / QUARTS
     if(s === 0) {
         if(m === 0 && SETTINGS.auto_h.on) playHourlyChime(h);
         else if(m === 30 && SETTINGS.auto_m.on) playHalfHourChime();
         else if((m === 15 || m === 45) && SETTINGS.auto_q.on) AUDIO.tinte(3);
     }
 
-    // REPETITIONS
     if(SETTINGS.auto_h.rep && SETTINGS.auto_h.on && secPastHour === SETTINGS.auto_h.del) playHourlyChime(h);
     if(SETTINGS.auto_m.rep && SETTINGS.auto_m.on && secPastHour === (1800 + SETTINGS.auto_m.del)) playHalfHourChime();
     if(SETTINGS.auto_q.rep && SETTINGS.auto_q.on && (secPastHour === (900 + SETTINGS.auto_q.del) || secPastHour === (2700 + SETTINGS.auto_q.del))) AUDIO.tinte(3);
@@ -150,30 +164,18 @@ function checkAutoChimes(h, m, s) {
 
 async function playHourlyChime(hour) {
     if(STATE.isChiming) return; 
-    STATE.isChiming = true;
-    STATE.stopSignal = false; 
-    
-    let count = hour % 12;
-    if(count === 0) count = 12;
+    STATE.isChiming = true; STATE.stopSignal = false; 
+    let count = hour % 12; if(count === 0) count = 12;
     const interval = (SETTINGS.auto_h.int || 2.25) * 1000;
-    
-    for(let i=0; i<count; i++) {
-        if(STATE.stopSignal) break;
-        AUDIO.tinte(2); 
-        await wait(interval); 
-    }
+    for(let i=0; i<count; i++) { if(STATE.stopSignal) break; AUDIO.tinte(2); await wait(interval); }
     STATE.isChiming = false;
 }
 
 async function playHalfHourChime() {
     if(STATE.isChiming) return;
-    STATE.isChiming = true;
-    STATE.stopSignal = false;
-    
-    if(!STATE.stopSignal) AUDIO.tinte(3); 
-    await wait(750); 
+    STATE.isChiming = true; STATE.stopSignal = false;
+    if(!STATE.stopSignal) AUDIO.tinte(3); await wait(750); 
     if(!STATE.stopSignal) AUDIO.tinte(2); 
-    
     STATE.isChiming = false;
 }
 
@@ -188,10 +190,7 @@ function checkSchedule(h, m, s, d, mo, y) {
             const [ed, em, ey] = evt.date.split('/').map(Number);
             const evtDate = new Date(ey, em-1, ed, evt.h, evt.m, evt.s);
             const now = new Date(y, mo-1, d, h, m, s);
-            if(evtDate < now && (now - evtDate) > 5000) { 
-                toRemove.push(idx);
-                return;
-            }
+            if(evtDate < now && (now - evtDate) > 5000) { toRemove.push(idx); return; }
         }
 
         if(evt.lastRun === `${h}:${m}:${s}:${d}`) return;
@@ -215,14 +214,10 @@ function checkSchedule(h, m, s, d, mo, y) {
                 evt.lastRun = `${h}:${m}:${s}:${d}`; 
                 saveData(); 
                 if(STATE.isChiming) return; 
-                
-                if(evt.progType==="MANU") {
-                    execComplexManual(evt); 
-                } else {
-                    // C'est ici que l'on relie l'événement agenda (ex: "MESSE 2") 
-                    // à sa configuration technique (ex: "MESSE")
+                if(evt.progType==="MANU") execComplexManual(evt); 
+                else {
                     const configName = (evt.progType === "PRESET" && evt.presetName) ? evt.presetName : evt.name;
-                    execPreset(configName, evt.dur); 
+                    execPreset(configName); 
                 }
             }
         }
@@ -236,8 +231,7 @@ function checkSchedule(h, m, s, d, mo, y) {
 
 async function execComplexManual(evt) {
     if(STATE.isChiming) return;
-    STATE.isChiming = true;
-    STATE.stopSignal = false; 
+    STATE.isChiming = true; STATE.stopSignal = false; 
     document.getElementById('screen-footer').innerText = "EXE: " + evt.name; 
 
     evt.bellConfig.forEach(conf => {
@@ -250,13 +244,11 @@ async function execComplexManual(evt) {
         if(actualDuration > 0) {
             const timeoutId = setTimeout(() => {
                 if(STATE.stopSignal) return;
-                
                 if(evt.typeAudio === "VOL") { 
                     AUDIO.start(conf.id); 
                     const stopId = setTimeout(() => { AUDIO.stop(conf.id); ACTIVE_LOOPS=ACTIVE_LOOPS.filter(id=>id!==stopId); }, actualDuration); 
                     ACTIVE_LOOPS.push(stopId); 
-                } 
-                else { 
+                } else { 
                     const endTime = Date.now() + actualDuration; 
                     const strikeLoop = () => { 
                         if(STATE.stopSignal || Date.now() >= endTime) return; 
@@ -272,128 +264,182 @@ async function execComplexManual(evt) {
         }
     });
     
-    setTimeout(() => { STATE.isChiming = false; document.getElementById('screen-footer').innerText = "PRET."; }, evt.dur * 1000);
+    setTimeout(() => { STATE.isChiming = false; document.getElementById('screen-footer').innerText = "PRET."; }, evt.dur * 1000 + 2000);
 }
 
-// Fonction Principale d'Exécution des Programmes (Messe, Mariage...)
-async function execPreset(name, customDur) {
-    if(STATE.isChiming && name !== "ANGELUS") return; 
-    
+
+// =========================================================================
+// MOTEUR D'EXECUTION UNIFIÉ (TIMELINE MIXTE & PARALLELE)
+// =========================================================================
+async function execPreset(name) {
+    if(STATE.isChiming) return; 
     STATE.isChiming = true; 
     STATE.stopSignal = false; 
-    document.getElementById('screen-footer').innerText = "EXE: "+name; 
+    STATE.lockedBells = [false, false, false, false, false, false]; 
+    document.getElementById('screen-footer').innerText = "EXE: " + name; 
     
-    let dur = customDur;
-    if(!dur) {
-        // Durées par défaut (chargées depuis les paramètres)
-        if(name==="ANGELUS") dur = SETTINGS.dur_angelus;
-        else if(name==="MESSE") dur = SETTINGS.dur_messe;
-        else if(name==="MARIAGE") dur = SETTINGS.dur_mariage;
-        else if(name==="BAPTEME") dur = SETTINGS.dur_bapteme;
-        else if(name==="GLAS" || name==="GLAS_H" || name==="GLAS_F") dur = SETTINGS.dur_glas;
-        else if(name==="PLENUM") dur = SETTINGS.dur_plenum;
-        else if(name==="TE_DEUM") dur = SETTINGS.dur_tedeum;
-        else if(name==="TOCSIN") dur = SETTINGS.dur_tocsin;
-        else dur = 180;
+    let timeline = SETTINGS.timelines[name];
+    if(!timeline || timeline.length === 0) {
+        if(name === "ANGELUS") {
+            const B=2;
+            for(let s=0; s<3; s++) { 
+               for(let c=0; c<3; c++) { if(STATE.stopSignal) break; AUDIO.tinte(B); await wait(2000); } 
+               if(STATE.stopSignal) break; await wait(4000); 
+            }
+        }
+        STATE.isChiming = false; 
+        document.getElementById('screen-footer').innerText = "PRET.";
+        return;
     }
 
-    // --- SONNERIES RYTHMIQUES (Restent codées en dur pour le rythme) ---
-    
-    if(name === "ANGELUS") {
-        const B = 2; // Cloche de frappe pour l'Angelus
-        for(let s=0; s<3; s++) { 
-            for(let c=0; c<3; c++) { 
-                if(STATE.stopSignal) break; 
-                AUDIO.tinte(B); await wait(2000); 
-            } 
-            if(STATE.stopSignal) break; 
-            await wait(4000); 
-        }
-        await wait(2000); 
-        // La volée finale utilise maintenant la CONFIGURATION (Délais/Arrêts)
-        if(!STATE.stopSignal) { 
-            await runDynamicVolley("ANGELUS", dur);
-        }
-    }
-    else if(name === "TE_DEUM") {
-        const endTime = Date.now() + (dur * 1000);
-        while(Date.now() < endTime && !STATE.stopSignal) {
-            AUDIO.tinte(1); await wait(800); AUDIO.tinte(3); await wait(800); AUDIO.tinte(4); await wait(800); AUDIO.tinte(2); await wait(1200);
+    const runningPromises = [];
+
+    for(let b = 0; b < timeline.length; b++) {
+        if(STATE.stopSignal) break;
+
+        const block = timeline[b];
+        const isLastBlock = (b === timeline.length - 1);
+        const isParallel = block.parallel === true;
+
+        const blockPromise = runBlock(block, isLastBlock, b, timeline.length, name);
+        runningPromises.push(blockPromise);
+
+        if (!isParallel) {
+            await blockPromise;
+        } else {
+            await wait(100);
         }
     }
-    else if(name === "TOCSIN") {
-        const endTime = Date.now() + (dur * 1000);
-        while(Date.now() < endTime && !STATE.stopSignal) { AUDIO.tinte(2); await wait(200); AUDIO.tinte(3); await wait(250); }
-    }
-    else if(name === "GLAS" || name === "GLAS_H") {
-        const endTime = Date.now() + (dur * 1000);
-        while(Date.now() < endTime && !STATE.stopSignal) { AUDIO.tinte(1); await wait(4000); if(name === "GLAS_H") { AUDIO.tinte(1); await wait(4000); AUDIO.tinte(1); await wait(8000); } }
-    }
-    else if(name === "GLAS_F") {
-        const endTime = Date.now() + (dur * 1000);
-        while(Date.now() < endTime && !STATE.stopSignal) { AUDIO.tinte(2); await wait(3000); AUDIO.tinte(2); await wait(7000); }
-    }
-    
-    // --- SONNERIES DE VOLÉE CLASSIQUES (MESSE, PLENUM, ETC.) ---
-    else { 
-        await runDynamicVolley(name, dur);
-    }
-    
+
+    await Promise.all(runningPromises);
+
+    STATE.lockedBells = [false, false, false, false, false, false];
+    AUDIO.stopAll();
     STATE.isChiming = false; 
     document.getElementById('screen-footer').innerText = "PRET.";
 }
 
-// Fonction qui exécute la volée en respectant vos configurations (délais, coupures)
-function runDynamicVolley(presetName, globalDuration) {
-    return new Promise((resolve) => {
-        const config = PRESET_CONFIGS[presetName];
-        if(!config) { 
-            // Sécurité : si pas de config trouvée, on sonne tout par défaut
-            for(let i=1;i<=5;i++) AUDIO.start(i);
-            setTimeout(() => { for(let i=1;i<=5;i++) AUDIO.stop(i); resolve(); }, globalDuration*1000);
-            return; 
+async function runBlock(block, isLastBlock, index, total, pName) {
+    const isLoopMode = (block.mode === "LOOP");
+    const repeatCount = (block.repeat || 1);
+    
+    // Si c'est le dernier bloc, on boucle si mode Loop ou si durée 0 (infini)
+    let isInfinite = isLastBlock && !isLoopMode && (block.duration === 0);
+    
+    const startTime = Date.now();
+    const durationMs = (block.duration || 0) * 1000;
+    const endTime = startTime + durationMs;
+
+    document.getElementById('screen-footer').innerText = `EXE: ${pName} [${index+1}/${total}]`;
+
+    if(block.type === "VOL") {
+        // Volée : toujours basée sur la durée pour l'instant
+        let effectiveDuration = isInfinite ? 999999 : block.duration;
+        await runDynamicVolley(block.volConfig, effectiveDuration, isInfinite);
+    }
+    else {
+        // SEQUENCE TINTÉE (SEQ)
+        if(!block.steps || block.steps.length === 0) { await wait(1000); return; }
+
+        if(isLoopMode) {
+            // MODE REPETITION (BOUCLE)
+            for(let loop=0; loop < repeatCount; loop++) {
+                if(STATE.stopSignal) break;
+                
+                for(let step of block.steps) {
+                    if(STATE.stopSignal) break;
+                    if(!STATE.lockedBells[step.bell]) {
+                        AUDIO.tinte(step.bell);
+                    }
+                    await wait(step.wait * 1000);
+                }
+            }
+        } else {
+            // MODE DUREE (TEMPS)
+            while(!STATE.stopSignal) {
+                if(!isInfinite && Date.now() >= endTime) break;
+
+                for(let step of block.steps) {
+                    if(STATE.stopSignal) break;
+                    if(!isInfinite && Date.now() >= endTime) break;
+
+                    if(!STATE.lockedBells[step.bell]) {
+                        AUDIO.tinte(step.bell);
+                    }
+                    await wait(step.wait * 1000);
+                }
+                if(!STATE.stopSignal) await wait(50);
+                if(!isInfinite && Date.now() >= endTime) break;
+            }
         }
+    }
+}
 
-        const globalEndTime = Date.now() + (globalDuration * 1000);
-        let activeCounts = 0;
+function runDynamicVolley(config, duration, isInfinite) {
+    return new Promise((resolve) => {
+        if(!config) { resolve(); return; }
 
+        const loops = [];
+        const globalDurMs = duration * 1000;
+        const bellsUsed = [];
+        
         for(let i=1; i<=5; i++) {
             const bellConf = config[i];
             if(bellConf && bellConf.active) {
-                activeCounts++;
+                if(STATE.lockedBells[i]) {
+                    console.log("Cloche " + i + " occupée !");
+                    continue; 
+                }
                 
+                STATE.lockedBells[i] = true;
+                bellsUsed.push(i);
+
                 const delayMs = (bellConf.delay || 0) * 1000;
                 const cutoffMs = (bellConf.cutoff || 0) * 1000;
                 
-                // Durée de vie spécifique de cette cloche
-                const myDuration = (globalDuration * 1000) - delayMs - cutoffMs;
+                let myDuration = -1;
+                if(!isInfinite) {
+                    myDuration = globalDurMs - delayMs - cutoffMs;
+                    if(myDuration <= 0) {
+                        STATE.lockedBells[i] = false;
+                        continue; 
+                    }
+                }
 
-                if(myDuration > 0) {
-                    // Timer de démarrage (Delay)
-                    const startTimer = setTimeout(() => {
-                        if(STATE.stopSignal) return;
-                        AUDIO.start(i);
-                        
-                        // Timer d'arrêt (Cutoff)
+                const startTimer = setTimeout(() => {
+                    if(STATE.stopSignal) return;
+                    AUDIO.start(i);
+                    
+                    if(myDuration > 0) {
                         const stopTimer = setTimeout(() => {
                             AUDIO.stop(i);
-                            ACTIVE_LOOPS = ACTIVE_LOOPS.filter(t => t !== stopTimer);
                         }, myDuration);
-                        
+                        loops.push(stopTimer);
                         ACTIVE_LOOPS.push(stopTimer);
-                        
-                    }, delayMs);
-                    
-                    ACTIVE_LOOPS.push(startTimer);
-                }
+                    }
+
+                }, delayMs);
+                loops.push(startTimer);
+                ACTIVE_LOOPS.push(startTimer);
             }
         }
         
-        // On attend la fin globale (+ marge de sécurité)
-        setTimeout(() => {
-            for(let i=1; i<=5; i++) AUDIO.stop(i); 
-            resolve();
-        }, globalDuration * 1000 + 1000); 
+        const checkInterval = setInterval(() => {
+            if(STATE.stopSignal) {
+                loops.forEach(id => clearTimeout(id));
+                bellsUsed.forEach(b => { AUDIO.stop(b); STATE.lockedBells[b] = false; });
+                clearInterval(checkInterval);
+                resolve();
+            }
+        }, 100);
+
+        if(!isInfinite) {
+            setTimeout(() => {
+                clearInterval(checkInterval);
+                bellsUsed.forEach(b => { AUDIO.stop(b); STATE.lockedBells[b] = false; });
+                resolve(); 
+            }, globalDurMs + 2500); 
+        }
     });
 }
 
@@ -454,9 +500,13 @@ function saveForm() {
     if(f.mode === "AUCUNE" && progDate < STATE.manualDateObj) alert("Note: Date passée !"); 
     
     if(STATE.editingIndex < 0 || STATE.editingLibrary) { 
-        let suffix = 1; let base = f.name; 
-        while(SCHEDULE.some(e=>e.name === base + " " + suffix)) suffix++; 
-        f.name = base + " " + suffix; 
+        const originalName = f.name.trim(); 
+        const nameExists = (n) => SCHEDULE.some(e => e.name === n);
+        if(nameExists(originalName)) {
+            let suffix = 1;
+            while(nameExists(originalName + " " + suffix)) { suffix++; }
+            f.name = originalName + " " + suffix;
+        }
         f.id = Date.now();
         SCHEDULE.push(f); 
     } else { 

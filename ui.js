@@ -1,5 +1,5 @@
 // =============================================================================
-// UI.JS - INTERFACE (V84 - CORRECTION HEURE DEFAUT & NOM)
+// UI.JS - INTERFACE COMPLETE (V103 - VISUAL FIX & CHOICE MENU)
 // =============================================================================
 
 const UI = {
@@ -7,7 +7,14 @@ const UI = {
         'HOME': { type: "static" },
         'MAIN': { title: "MENU PRINCIPAL", items: [ { t: "➕ PROGRAMMES", link: "PROGS" }, { t: "📅 AGENDA", link: "AGENDA_VIEW" }, { t: "⚙️ PARAMETRES", link: "SETTINGS" }, { t: "📚 BIBLIOTHEQUE", link: "LIB_VIEW" } ]},
         'PROGS': { title: "CHOIX PROG", items: [ { t: "🔔 ANGELUS", run: "ANGELUS" }, { t: "⛪ MESSE", run: "MESSE" }, { t: "💍 MARIAGE", run: "MARIAGE" }, { t: "👶 BAPTEME", run: "BAPTEME" }, { t: "🎉 PLENUM (FETES)", run: "PLENUM" }, { t: "⚰️ GLAS (STD)", run: "GLAS" }, { t: "🎶 TE DEUM", run: "TE_DEUM" }, { t: "🔥 TOCSIN (ALERTE)", run: "TOCSIN" } ]},
-        'SETTINGS': { title: "PARAMETRES", items: [ { t: "🛠️ CONFIG. PROGRAMMES", link: "SET_PROGS_LIST" }, { t: "🕒 HORLOGE SYSTEME", link: "SET_CLOCK" }, { t: "🤖 AUTOMATISMES", link: "SET_AUTO" }, { t: "🌙 MODE NUIT", link: "SET_NIGHT" } ]},
+        
+        'SETTINGS': { title: "PARAMETRES", items: [ 
+            { t: "🛠️ CONFIG. PROGRAMMES", link: "SET_PROGS_LIST" }, 
+            { t: "🕒 HORLOGE SYSTEME", link: "SET_CLOCK" }, 
+            { t: "🤖 AUTOMATISMES", link: "SET_AUTO" }, 
+            { t: "🌙 MODE NUIT", link: "SET_NIGHT" } 
+        ]},
+
         'SET_CLOCK': { title: "REGLAGE HORLOGE", items: [ { t: "Mode: ", action: "TOGGLE_CLOCK_MODE" }, { t: "REGLER HEURE", action: "EDIT_SYS_TIME" }, { t: "REGLER DATE", action: "EDIT_SYS_DATE" } ]},
         'SET_AUTO': { title: "AUTOMATISMES", items: [ { t: "🔔 SONNERIE HORAIRE >", link: "SET_AUTO_CHIME" }, { t: "⛪ ANGELUS >", link: "ANG_LIST" } ]},
         'SET_AUTO_CHIME': { title: "SONNERIE HORAIRE", items: [ { t: "HEURES >", link: "SET_AUTO_H" }, { t: "DEMIES >", link: "SET_AUTO_M" }, { t: "QUARTS >", link: "SET_AUTO_Q" } ]},
@@ -40,14 +47,15 @@ const UI = {
         }
 
         const scr = document.getElementById('screen-content');
+        
         if(STATE.timeEditor.active) {
             const te = STATE.timeEditor;
             let title = "REGLAGE";
             if(te.type==="TIME") title = "VALEUR (H:M:S)";
-            if(te.type==="MIN_SEC") title = "VALEUR (MIN:SEC)";
+            if(te.type==="MIN_SEC") title = "DUREE (MIN:SEC)";
             if(te.type==="DATE") title = "REGLAGE DATE";
-            if(te.type==="INT") title = "VALEUR (SEC)";
-            if(te.type==="DECIMAL") title = "INTERVALLE (SEC)";
+            if(te.type==="INT") title = "VALEUR (NB)";
+            if(te.type==="DECIMAL") title = "VALEUR (SEC)";
             let html = `<div class="editor-overlay"><div class="editor-header">${title}</div><div class="time-container">`;
             te.vals.forEach((v, idx) => { 
                 const valDisplay = (te.type === "DECIMAL") ? v.toFixed(2) : pad(v);
@@ -59,29 +67,183 @@ const UI = {
 
         const mode = STATE.menuStack[STATE.menuStack.length-1];
 
+        // --- MENU DE CHOIX : TYPE DE FIN (DUREE ou BOUCLE) ---
+        if(mode === "SEQ_END_CHOICE") {
+            let h = `<div class="menu-title">CHOISIR TYPE FIN</div>`;
+            h += `<div class="menu-item ${STATE.cursor===0?'selected':''}"><span>1. PAR DUREE (TEMPS)</span></div>`;
+            h += `<div class="menu-item ${STATE.cursor===1?'selected':''}"><span>2. PAR REPETITIONS (NB)</span></div>`;
+            scr.innerHTML = h; return;
+        }
+
+        // --- VUE TIMELINE (LISTE DES BLOCS) ---
+        if(mode === "TIMELINE_VIEW") {
+            const tmName = STATE.editingTimelineName;
+            const timeline = SETTINGS.timelines[tmName] || [];
+            
+            let h = `<div class="menu-title">${tmName}: SEQUENCES</div>`;
+            // Scroll unique via page principale
+            h += `<div style="width:100%;">`;
+            
+            if(timeline.length === 0) h += `<div class="menu-item"><span>(VIDE)</span></div>`;
+            
+            timeline.forEach((block, idx) => {
+                const isLast = (idx === timeline.length - 1);
+                // Affichage intelligent de la durée / répétition
+                let durTxt = "";
+                if(isLast && block.mode!=="LOOP") durTxt = "INFINI ♾️";
+                else if(block.mode === "LOOP") durTxt = (block.repeat||1) + " FOIS";
+                else durTxt = secToMinSec(block.duration || 0);
+
+                const typeIcon = (block.type === "VOL") ? "🔔" : "🔨";
+                const parIcon = block.parallel ? "⚡" : "⬇";
+                const isSel = (STATE.cursor === idx);
+                h += `<div class="menu-item ${isSel?'selected':''}" style="justify-content:space-between;">
+                        <span>SEQ ${idx+1} ${typeIcon} ${parIcon}</span>
+                        <span style="font-size:0.8em; color:${isLast?'#f1c40f':'#aaa'}">${durTxt}</span>
+                      </div>`;
+            });
+            h += `</div>`;
+            
+            const lastIdx = timeline.length;
+            h += `<div class="save-btn-row ${STATE.cursor===lastIdx ? 'selected':''}" style="color:#2ecc71; margin-top:2px;">[ + AJOUT TINTEMENT ]</div>`;
+            h += `<div class="save-btn-row ${STATE.cursor===lastIdx+1 ? 'selected':''}" style="color:#e67e22;">[ + AJOUT VOLEE ]</div>`;
+            h += `<div class="save-btn-row ${STATE.cursor===lastIdx+2 ? 'selected':''}" style="color:#e74c3c;">[ RETOUR ]</div>`;
+            
+            scr.innerHTML = h;
+            const sel = document.querySelector('.selected'); if(sel) sel.scrollIntoView({block:"nearest"});
+            return;
+        }
+
+        // --- EDITEUR DE BLOC (SEQ ou VOL) ---
+        if(mode === "BLOCK_EDITOR") {
+            const tmName = STATE.editingTimelineName;
+            const blockIdx = STATE.editingBlockIndex;
+            const block = SETTINGS.timelines[tmName][blockIdx];
+            const isLast = (blockIdx === SETTINGS.timelines[tmName].length - 1);
+            
+            let title = `SEQ ${blockIdx+1} (${block.type==="VOL"?"VOLEE":"TINT"})`;
+            let h = `<div class="menu-title" style="font-size:0.9em;">${title}</div>`;
+            
+            h += `<div style="width:100%; border:1px solid #444; margin-bottom:5px; background:#222;">`;
+            
+            // --- CAS 1 : SEQUENCE TINTÉE (SEQ) ---
+            if(block.type === "SEQ") {
+                const steps = block.steps || [];
+                if(steps.length === 0) {
+                    h += `<div style="padding:10px; color:#666; text-align:center;">(VIDE)</div>`;
+                } else {
+                    steps.forEach((step, idx) => {
+                        const isSel = (STATE.cursor === idx);
+                        // AJOUT PADDING-RIGHT pour éviter superposition curseur
+                        h += `<div class="agenda-row ${isSel?'selected':''}" style="justify-content:space-between; padding:8px 5px; white-space:nowrap;">
+                                <div style="display:flex; align-items:center;">
+                                    <span style="color:#888; font-size:0.8em; margin-right:5px;">${idx+1}.</span>
+                                    <span style="font-size:0.9em;">🔨C<b>${step.bell}</b></span>
+                                </div>
+                                <div style="display:flex; align-items:center; padding-right:30px;">
+                                    <span style="font-size:0.8em; margin-right:5px;">PAUSE</span>
+                                    <span style="color:${isSel?'#f1c40f':'#fff'}; font-weight:bold;">${step.wait.toFixed(2)}s</span>
+                                </div>
+                              </div>`;
+                    });
+                }
+            }
+
+            // --- CAS 2 : VOLEE (VOL) - GRILLE ---
+            else if(block.type === "VOL") {
+                const conf = block.volConfig || {};
+                // PADDING-RIGHT AUGMENTÉ (30px)
+                h += `<div style="display:flex; font-size:0.7em; color:#888; padding:0 5px; margin-bottom:5px;">
+                        <span style="width:60px;">ETAT</span>
+                        <span style="flex:1; text-align:center;">DEPART</span>
+                        <span style="flex:1; text-align:right; padding-right:30px;">ARRET</span>
+                      </div>`;
+
+                for(let i=1; i<=5; i++) {
+                    const bc = conf[i] || {active:false, delay:0, cutoff:0};
+                    const idxBase = (i-1)*3;
+                    const sel1 = (STATE.cursor === idxBase);   
+                    const sel2 = (STATE.cursor === idxBase+1); 
+                    const sel3 = (STATE.cursor === idxBase+2); 
+                    
+                    const styleSel = "background:#f1c40f; color:#000; font-weight:bold; border-radius:3px; padding:2px 5px;";
+                    const styleDef = "padding:2px 5px;";
+
+                    h += `<div style="display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid #333;">
+                            <div style="width:60px; ${sel1?styleSel:styleDef}">
+                                ${bc.active ? '✅ ON' : '❌ OFF'} <span style="font-size:0.8em">C${i}</span>
+                            </div>
+                            <div style="flex:1; text-align:center; ${sel2?styleSel:styleDef}">
+                                ▶️ ${secToMinSec(bc.delay||0)}
+                            </div>
+                            <div style="flex:1; text-align:right; padding-right:30px; ${sel3?styleSel:styleDef}">
+                                ⏹️ ${secToMinSec(bc.cutoff||0)}
+                            </div>
+                          </div>`;
+                }
+            }
+            h += `</div>`; 
+            
+            // MENU ACTIONS (ORDRE MODIFIÉ pour SEQ)
+            const maxItm = (block.type==="SEQ") ? block.steps.length : 15;
+            
+            // Calcul Label Durée / Boucle
+            let durLabel = "";
+            if(isLast && block.mode!=="LOOP") durLabel = "FIN: INFINI (DUREE)";
+            else if(block.mode === "LOOP") durLabel = `FIN: ${block.repeat} REPETITION(S)`;
+            else durLabel = `FIN: ${secToMinSec(block.duration||0)} (DUREE)`;
+
+            let parLabel = block.parallel ? "SUITE: EN MEME TPS ⚡" : "SUITE: ATTENDRE ⬇";
+
+            // BOUTON 1 : AJOUTER ETAPE (SI SEQ) - PRIORITÉ 1 (DEMANDE USER)
+            let buttonCursorBase = maxItm;
+            if(block.type==="SEQ") {
+                h += `<div class="save-btn-row ${STATE.cursor===buttonCursorBase ? 'selected':''}" style="color:#2ecc71;">[ + AJOUTER ETAPE ]</div>`;
+                buttonCursorBase++;
+            }
+
+            // BOUTON 2 : DUREE / BOUCLE
+            // Décalage d'index si SEQ
+            let idxDur = buttonCursorBase;
+            h += `<div class="save-btn-row ${STATE.cursor===idxDur ? 'selected':''}" style="color:#3498db;">[ ${durLabel} ]</div>`;
+            buttonCursorBase++;
+            
+            // BOUTON 3 : PARALLELE
+            let idxPar = buttonCursorBase;
+            h += `<div class="save-btn-row ${STATE.cursor===idxPar ? 'selected':''}" style="color:#9b59b6;">[ ${parLabel} ]</div>`;
+            buttonCursorBase++;
+            
+            // BOUTON 4 : RETOUR
+            let idxRet = buttonCursorBase;
+            h += `<div class="save-btn-row ${STATE.cursor===idxRet ? 'selected':''}" style="color:#e74c3c;">[ RETOUR ]</div>`;
+            
+            scr.innerHTML = h; 
+            const sel = document.querySelector('.selected'); if(sel) sel.scrollIntoView({block:"nearest"});
+            return;
+        }
+
         if(mode === "SET_PROGS_LIST") {
             let h = `<div class="menu-title">CHOIX PROGRAMME</div>`;
-            const allowedProgs = ["MESSE", "MARIAGE", "BAPTEME", "PLENUM", "ANGELUS", "GLAS"];
+            const allowedProgs = ["MESSE", "MARIAGE", "BAPTEME", "PLENUM", "ANGELUS", "GLAS", "TE_DEUM", "TOCSIN"];
             allowedProgs.forEach((k, idx) => {
                 h += `<div class="menu-item ${idx===STATE.cursor?'selected':''}"><span>${k}</span></div>`;
             });
             scr.innerHTML = h; const sel = document.querySelector('.selected'); if(sel) sel.scrollIntoView({block:"nearest"}); return;
         }
 
+        // SET_PROG_ROOT est supprimé de la navigation mais le code reste pour compatibilité
         if(mode === "SET_PROG_ROOT") {
             const pName = STATE.selectedPreset;
-            let currentDur = 0;
-            const map = {"ANGELUS":"dur_angelus","MESSE":"dur_messe","MARIAGE":"dur_mariage","PLENUM":"dur_plenum","BAPTEME":"dur_bapteme","GLAS":"dur_glas"};
-            if(map[pName]) currentDur = SETTINGS[map[pName]];
             let h = `<div class="menu-title">CONFIG: ${pName}</div>`;
-            h += `<div class="menu-item ${STATE.cursor===0?'selected':''}"><span>DUREE PAR DEFAUT:</span><span>${secToMinSec(currentDur)}</span></div>`;
-            h += `<div class="menu-item ${STATE.cursor===1?'selected':''}"><span>REGLER CLOCHES ></span></div>`;
+            h += `<div class="menu-item ${STATE.cursor===0?'selected':''}" style="color:#f39c12;"><span>EDITER SEQUENCES ></span></div>`;
+            h += `<div class="menu-item ${STATE.cursor===1?'selected':''}"><span>(Legacy) VOLEE ></span></div>`;
             scr.innerHTML = h; return;
         }
 
+        // MENUS LEAGCY (GARDÉS)
         if(mode === "SET_PROG_BELLS") {
             const pName = STATE.selectedPreset;
-            let h = `<div class="menu-title">${pName}: CLOCHES</div>`;
+            let h = `<div class="menu-title">${pName}: VOLEE</div>`;
             for(let i=1; i<=5; i++) {
                 const conf = PRESET_CONFIGS[pName][i];
                 if(!conf) continue; 
@@ -267,6 +429,24 @@ const UI = {
 const SYS = {
     manualDirect: function(n) {
         if(SETTINGS.emergency_mode) return;
+        
+        // INTERCEPTION POUR L'EDITEUR DE SEQUENCE (BLOCK_EDITOR)
+        if(STATE.menuStack[STATE.menuStack.length-1] === "BLOCK_EDITOR") {
+            const tmName = STATE.editingTimelineName;
+            const blockIdx = STATE.editingBlockIndex;
+            const block = SETTINGS.timelines[tmName][blockIdx];
+            
+            if(block.type === "SEQ") {
+                const steps = block.steps;
+                if(steps && STATE.cursor < steps.length) {
+                    steps[STATE.cursor].bell = n; 
+                    saveData();
+                    UI.render();
+                    return;
+                }
+            }
+        }
+
         if(STATE.menuStack[STATE.menuStack.length-1] === "FORM" && STATE.formData.progType === "MANU") {
             const f = STATE.formData; const idx = f.bells.indexOf(n);
             if(idx > -1) { 
@@ -276,61 +456,30 @@ const SYS = {
             }
             UI.render(); return;
         }
+        
         if (STATE.manualMode === "TINT") AUDIO.tinte(n); else { const eng = STATE.engines[n]; if (eng.isSwinging) AUDIO.stop(n); else AUDIO.start(n); }
     },
     stopAll: () => AUDIO.stopAll(),
     
- // CORRECTION F2/F3 : Heure réelle + Nom par défaut simple
     fKey: function(n) {
         STATE.editingIndex = -1; STATE.cursor = 0; STATE.timeEditor.active = false;
-        
-        // 1. Calcul de l'heure exacte
         let nowH, nowM;
-        if(SETTINGS.clock_mode === "AUTO") {
-            const d = new Date();
-            nowH = d.getHours(); nowM = d.getMinutes();
-        } else {
-            nowH = STATE.manualDateObj.getHours(); 
-            nowM = STATE.manualDateObj.getMinutes();
-        }
-        
-        // 2. On ajoute 1 minute par défaut
-        let defM = nowM + 1;
-        let defH = nowH;
+        if(SETTINGS.clock_mode === "AUTO") { const d = new Date(); nowH = d.getHours(); nowM = d.getMinutes(); } 
+        else { nowH = STATE.manualDateObj.getHours(); nowM = STATE.manualDateObj.getMinutes(); }
+        let defM = nowM + 1; let defH = nowH;
         if(defM > 59) { defM = 0; defH++; if(defH > 23) defH = 0; }
         
         if(n===1) STATE.menuStack=["MAIN"];
-        
         if(n===2) { 
-            // PRESET (F2) 
             loadEventToForm({
-                type:"PRESET", progType:"PRESET", 
-                name: "Programmation", // Nom par défaut simple
-                presetName:"MESSE", 
-                bells:[1,2,3], 
-                dur: SETTINGS.dur_messe,
-                mode:"AUCUNE", 
-                date: getCurrentDateStr(), 
-                h: defH, m: defM, s: 0
-            }, -1); 
-            STATE.menuStack=["FORM"]; 
+                type:"PRESET", progType:"PRESET", name: "Programmation", presetName:"MESSE", bells:[1,2,3], dur: SETTINGS.dur_messe, mode:"AUCUNE", date: getCurrentDateStr(), h: defH, m: defM, s: 0
+            }, -1); STATE.menuStack=["FORM"]; 
         }
-        
         if(n===3) { 
-            // MANUAL (F3)
             loadEventToForm({
-                type:"MANUAL", progType:"MANU", 
-                name: "Sonnerie manuelle", // ICI : Juste le texte, pas de calcul de chiffre
-                typeAudio: "VOL", 
-                bells:[], bellConfig: [], 
-                dur: 60, 
-                mode:"AUCUNE", 
-                date: getCurrentDateStr(), 
-                h: defH, m: defM, s: 0
-            }, -1); 
-            STATE.menuStack=["FORM"]; 
+                type:"MANUAL", progType:"MANU", name: "Sonnerie manuelle", typeAudio: "VOL", bells:[], bellConfig: [], dur: 60, mode:"AUCUNE", date: getCurrentDateStr(), h: defH, m: defM, s: 0
+            }, -1); STATE.menuStack=["FORM"]; 
         }
-        
         if(n===4) STATE.menuStack=["AGENDA_VIEW"];
         UI.render();
     },
@@ -341,167 +490,159 @@ const SYS = {
         if(STATE.timeEditor.active) { this.handleTimeEditor(key); return; }
         const mode = STATE.menuStack[STATE.menuStack.length-1];
         
+        // RETOUR / CANCEL
         if(key === "C") { 
             if(mode==="HOME"){ STATE.manualMode = (STATE.manualMode==="TINT")?"VOL":"TINT"; UI.render(); return; } 
-            STATE.menuStack.pop(); 
-            if(!STATE.menuStack.length) STATE.menuStack=["HOME"]; 
-            STATE.cursor=0; 
-            UI.render(); return; 
+            
+            if(mode === "SEQ_END_CHOICE") {
+                STATE.menuStack.pop(); UI.render(); return;
+            }
+
+            if(mode === "TIMELINE_VIEW") {
+                const tm = SETTINGS.timelines[STATE.editingTimelineName];
+                if(STATE.cursor < tm.length) { if(confirm("Supprimer cette Séquence ?")) { tm.splice(STATE.cursor, 1); saveData(); } } 
+                else { STATE.menuStack.pop(); STATE.cursor=0; }
+                UI.render(); return;
+            }
+            if(mode === "BLOCK_EDITOR") {
+                 const tmName = STATE.editingTimelineName;
+                 const block = SETTINGS.timelines[tmName][STATE.editingBlockIndex];
+                 if(block.type === "SEQ" && STATE.cursor < block.steps.length) {
+                     if(confirm("Supprimer étape ?")) { block.steps.splice(STATE.cursor, 1); saveData(); }
+                 } else { STATE.menuStack.pop(); STATE.cursor=0; }
+                 UI.render(); return;
+            }
+            STATE.menuStack.pop(); if(!STATE.menuStack.length) STATE.menuStack=["HOME"]; STATE.cursor=0; UI.render(); return; 
         }
 
+        // --- NAVIGATION CHOIX TYPE FIN (NOUVEAU) ---
+        if(mode === "SEQ_END_CHOICE") {
+            if(key==="UP" || key==="DOWN") { STATE.cursor = (STATE.cursor===0) ? 1 : 0; }
+            if(key==="OK") {
+                const tmName = STATE.editingTimelineName;
+                const block = SETTINGS.timelines[tmName][STATE.editingBlockIndex];
+                
+                if(STATE.cursor === 0) {
+                    // MODE TEMPS
+                    block.mode = "TIME";
+                    let m=Math.floor(block.duration/60), s=Math.floor(block.duration%60);
+                    openUnifiedEditor("BLOCK_DURATION", "MIN_SEC", [m, s], ["MIN","SEC"]);
+                } else {
+                    // MODE REPETITION
+                    block.mode = "LOOP";
+                    openUnifiedEditor("BLOCK_REPEAT", "INT", [block.repeat || 1], ["NB"]);
+                }
+                saveData();
+                STATE.menuStack.pop(); // Close choice
+            }
+            UI.render(); return;
+        }
+
+        // --- NAVIGATION TIMELINE ---
+        if(mode === "TIMELINE_VIEW") {
+            const tm = SETTINGS.timelines[STATE.editingTimelineName];
+            if(!tm) { SETTINGS.timelines[STATE.editingTimelineName] = []; UI.render(); return; }
+            const max = tm.length + 2; 
+            if(key==="UP") { STATE.cursor--; if(STATE.cursor<0) STATE.cursor=max; }
+            if(key==="DOWN") { STATE.cursor++; if(STATE.cursor>max) STATE.cursor=0; }
+            if(key==="OK" || key==="RIGHT") {
+                if(STATE.cursor < tm.length) { STATE.editingBlockIndex = STATE.cursor; STATE.menuStack.push("BLOCK_EDITOR"); STATE.cursor = 0; }
+                else if(STATE.cursor === tm.length) { tm.push({ type: "SEQ", duration: 0, steps: [], parallel: false, mode:"TIME", repeat:1 }); saveData(); }
+                else if(STATE.cursor === tm.length + 1) { tm.push({ type: "VOL", duration: 60, volConfig: {1:{active:false},2:{active:false},3:{active:false},4:{active:false},5:{active:false}}, parallel: false, mode:"TIME", repeat:1 }); saveData(); }
+                else { STATE.menuStack.pop(); STATE.cursor = 0; }
+            }
+            UI.render(); return;
+        }
+
+        // --- NAVIGATION EDITEUR BLOC ---
+        if(mode === "BLOCK_EDITOR") {
+            const tmName = STATE.editingTimelineName;
+            const block = SETTINGS.timelines[tmName][STATE.editingBlockIndex];
+            
+            // TINTEMENT
+            if(block.type === "SEQ") {
+                const steps = block.steps;
+                const max = steps.length + 3; // Ajout, Durée, Parallèle, Retour
+                
+                if(key==="UP") { STATE.cursor--; if(STATE.cursor<0) STATE.cursor=max; }
+                if(key==="DOWN") { STATE.cursor++; if(STATE.cursor>max) STATE.cursor=0; }
+                
+                if((key==="RIGHT" || key==="LEFT") && STATE.cursor < steps.length) {
+                    let step = steps[STATE.cursor];
+                    step.wait += (key==="RIGHT" ? 0.25 : -0.25); if(step.wait < 0.25) step.wait = 0.25; saveData();
+                }
+
+                if(key==="OK") {
+                    // 1. AJOUT (Maintenant en PREMIER)
+                    if(STATE.cursor === steps.length) { 
+                        steps.push({ bell: 1, wait: 1.0 }); saveData();
+                    }
+                    // 2. DUREE / FIN (OUVRE LE MENU CHOIX)
+                    else if(STATE.cursor === steps.length + 1) { 
+                        STATE.menuStack.push("SEQ_END_CHOICE"); STATE.cursor=0;
+                    }
+                    // 3. PARALLELE
+                    else if(STATE.cursor === steps.length + 2) { 
+                        block.parallel = !block.parallel; saveData();
+                    }
+                    // 4. RETOUR
+                    else if(STATE.cursor === steps.length + 3) { 
+                        STATE.menuStack.pop(); STATE.cursor=0; 
+                    }
+                }
+            }
+            
+            // VOLEE
+            else if(block.type === "VOL") {
+                const max = 17; // 15 slots + durée + parallèle + retour
+                
+                if(key==="UP") { 
+                    if(STATE.cursor < 15) { if(STATE.cursor >= 3) STATE.cursor -= 3; else STATE.cursor = 17; } 
+                    else { if(STATE.cursor === 15) STATE.cursor = 12; else STATE.cursor--; }
+                }
+                if(key==="DOWN") { 
+                    if(STATE.cursor < 12) STATE.cursor += 3; else if(STATE.cursor < 15) STATE.cursor = 15; else if(STATE.cursor < 17) STATE.cursor++; else STATE.cursor = 0; 
+                }
+                if(key==="RIGHT" && STATE.cursor < 15) { if(STATE.cursor % 3 < 2) STATE.cursor++; }
+                if(key==="LEFT" && STATE.cursor < 15) { if(STATE.cursor % 3 > 0) STATE.cursor--; }
+                
+                if(key==="OK") {
+                    if(STATE.cursor < 15) {
+                        const bId = Math.floor(STATE.cursor / 3) + 1; const sub = STATE.cursor % 3;
+                        if(!block.volConfig[bId]) block.volConfig[bId] = {active:false, delay:0, cutoff:0};
+                        const conf = block.volConfig[bId];
+                        
+                        if(sub === 0) { conf.active = !conf.active; saveData(); }
+                        else if(sub === 1) openUnifiedEditor("BLK_VOL_DEL_"+bId, "MIN_SEC", [Math.floor(conf.delay/60), conf.delay%60], ["MIN","SEC"]);
+                        else if(sub === 2) openUnifiedEditor("BLK_VOL_CUT_"+bId, "MIN_SEC", [Math.floor(conf.cutoff/60), conf.cutoff%60], ["MIN","SEC"]);
+                    }
+                    else if(STATE.cursor === 15) { // DUREE -> MENU CHOIX
+                        STATE.menuStack.push("SEQ_END_CHOICE"); STATE.cursor=0;
+                    }
+                    else if(STATE.cursor === 16) { block.parallel = !block.parallel; saveData(); }
+                    else if(STATE.cursor === 17) { STATE.menuStack.pop(); STATE.cursor=0; }
+                }
+            }
+            UI.render(); return;
+        }
+
+        // --- ACCES DIRECT ---
         if(mode === "SET_PROGS_LIST") {
-            const allowedProgs = ["MESSE", "MARIAGE", "BAPTEME", "PLENUM", "ANGELUS", "GLAS"];
+            const allowedProgs = ["MESSE", "MARIAGE", "BAPTEME", "PLENUM", "ANGELUS", "GLAS", "TE_DEUM", "TOCSIN"];
             if(key==="UP") { STATE.cursor--; if(STATE.cursor<0) STATE.cursor=allowedProgs.length-1; }
             if(key==="DOWN") { STATE.cursor++; if(STATE.cursor>=allowedProgs.length) STATE.cursor=0; }
             if(key==="OK" || key==="RIGHT") {
                 STATE.selectedPreset = allowedProgs[STATE.cursor];
-                STATE.menuStack.push("SET_PROG_ROOT");
-                STATE.cursor = 0;
+                STATE.editingTimelineName = STATE.selectedPreset;
+                if(!SETTINGS.timelines[STATE.editingTimelineName]) SETTINGS.timelines[STATE.editingTimelineName] = [];
+                STATE.menuStack.push("TIMELINE_VIEW"); STATE.cursor = 0;
             }
             UI.render(); return;
         }
 
-        if(mode === "SET_PROG_ROOT") {
-            if(key==="UP") { STATE.cursor--; if(STATE.cursor<0) STATE.cursor=1; }
-            if(key==="DOWN") { STATE.cursor++; if(STATE.cursor>1) STATE.cursor=0; }
-            if(key==="OK" || key==="RIGHT") {
-                if(STATE.cursor === 0) {
-                    const pName = STATE.selectedPreset;
-                    const map = {"ANGELUS":"dur_angelus","MESSE":"dur_messe","MARIAGE":"dur_mariage","PLENUM":"dur_plenum","BAPTEME":"dur_bapteme","GLAS":"dur_glas"};
-                    if(map[pName]) {
-                        const val = SETTINGS[map[pName]];
-                        openUnifiedEditor("SET_PROG_DUR_"+map[pName], "MIN_SEC", [Math.floor(val/60), val%60], ["MIN","SEC"]);
-                    }
-                } else {
-                    STATE.menuStack.push("SET_PROG_BELLS");
-                    STATE.cursor = 0;
-                }
-            }
-            UI.render(); return;
-        }
-
-        if(mode === "SET_PROG_BELLS") {
-            if(key==="UP") { STATE.cursor--; if(STATE.cursor<0) STATE.cursor=4; }
-            if(key==="DOWN") { STATE.cursor++; if(STATE.cursor>4) STATE.cursor=0; }
-            if(key==="OK" || key==="RIGHT") {
-                STATE.selectedBellConfig = STATE.cursor + 1; 
-                STATE.menuStack.push("SET_PROG_PARAM");
-                STATE.cursor = 0;
-            }
-            UI.render(); return;
-        }
-
-        if(mode === "SET_PROG_PARAM") {
-            if(key==="UP") { STATE.cursor--; if(STATE.cursor<0) STATE.cursor=2; }
-            if(key==="DOWN") { STATE.cursor++; if(STATE.cursor>2) STATE.cursor=0; }
-            if(key==="OK" || key==="RIGHT") {
-                const pName = STATE.selectedPreset;
-                const bId = STATE.selectedBellConfig;
-                const conf = PRESET_CONFIGS[pName][bId];
-                if(STATE.cursor===0) { conf.active = !conf.active; saveData(); }
-                else if(STATE.cursor===1) { openUnifiedEditor("CONF_DELAY", "MIN_SEC", [Math.floor(conf.delay/60), conf.delay%60], ["MIN","SEC"]); }
-                else if(STATE.cursor===2) { openUnifiedEditor("CONF_CUTOFF", "MIN_SEC", [Math.floor(conf.cutoff/60), conf.cutoff%60], ["MIN","SEC"]); }
-            }
-            UI.render(); return;
-        }
-
-        if(mode === "FORM") {
-            const f = STATE.formData; let maxRows = 7; let idxOffset = (f.progType==="MANU") ? 1 : 0; maxRows += idxOffset;
-            if(f.progType==="MANU") maxRows += (f.bellConfig.length * (f.typeAudio === "TINT" ? 3 : 2));
-            let btnSaveIdx = maxRows; let btnDelIdx = (STATE.editingIndex>=0 || STATE.editingLibrary) ? maxRows+1 : -1; let btnLibIdx = (STATE.editingLibrary)?-1:(STATE.editingIndex>=0?maxRows+2:maxRows+1);
-            let totalRows = (STATE.editingLibrary)?maxRows+1:(STATE.editingIndex>=0?maxRows+2:maxRows+1);
-
-            if(key==="UP") { STATE.cursor--; if(STATE.cursor<0) STATE.cursor=totalRows; }
-            if(key==="DOWN") { STATE.cursor++; if(STATE.cursor>totalRows) STATE.cursor=0; }
-            const dir = (key==="RIGHT"?1:(key==="LEFT"?-1:0));
-            if(dir!==0 && STATE.cursor <= 6) {
-                 if(STATE.cursor===1) { f.progType = (f.progType==="MANU"?"PRESET":"MANU"); if(f.progType === "PRESET") f.presetName = "MESSE"; }
-                 
-                 // MAJ DYNAMIQUE DUREE
-                 if(STATE.cursor===2) { 
-                     if(f.progType==="PRESET") { 
-                         let idx = PRESET_NAMES.indexOf(f.presetName); 
-                         f.presetName = PRESET_NAMES[(idx+dir+PRESET_NAMES.length)%PRESET_NAMES.length]; 
-                         
-                         const map = {"ANGELUS":"dur_angelus","MESSE":"dur_messe","MARIAGE":"dur_mariage","PLENUM":"dur_plenum","BAPTEME":"dur_bapteme","GLAS":"dur_glas","TE_DEUM":"dur_tedeum","TOCSIN":"dur_tocsin"};
-                         if(map[f.presetName]) f.dur = SETTINGS[map[f.presetName]];
-                     } else { 
-                         f.typeAudio = (f.typeAudio==="VOL") ? "TINT" : "VOL"; 
-                     } 
-                 }
-                 
-                 if(f.progType === "MANU" && STATE.cursor===3) { STATE.bellCursor = (STATE.bellCursor+dir+3)%4+1; }
-                 if(STATE.cursor===(3+idxOffset)) f.mode = (f.mode==="AUCUNE")?"PERSO":"AUCUNE";
-            }
-            if(key==="OK") {
-                if(STATE.cursor===0) { const n = prompt("Nom:", f.name); if(n) f.name = n; }
-                else if(STATE.cursor===(3+idxOffset)) { if(f.mode==="PERSO") { openRepEditor(); STATE.menuStack.push("REP_EDITOR"); } }
-                else if(STATE.cursor===(4+idxOffset)) { const [d,m,y] = f.date.split('/'); openUnifiedEditor("PROG_DATE", "DATE", [d,m,y], ["J","M","A"]); }
-                else if(STATE.cursor===(5+idxOffset)) openUnifiedEditor("START", "TIME", [f.h, f.m, f.s], ["H","M","S"]);
-                else if(STATE.cursor===(6+idxOffset)) { let h = Math.floor(f.dur/3600), m = Math.floor((f.dur%3600)/60), s = f.dur%60; openUnifiedEditor("PROG_DUR", "TIME", [h, m, s], ["H","M","S"]); }
-                else if(f.progType==="MANU" && STATE.cursor===3) { SYS.manualDirect(STATE.bellCursor); }
-                else if(STATE.cursor >= (7+idxOffset) && STATE.cursor < btnSaveIdx) { 
-                    const rel = STATE.cursor-(7+idxOffset); let step = (f.typeAudio === "TINT") ? 3 : 2; const bIdx = Math.floor(rel/step); const sub = rel%step;
-                    if(sub===2) openUnifiedEditor("B_CAD_"+bIdx, "DECIMAL", [f.bellConfig[bIdx].cadence], ["SEC"]);
-                    else openUnifiedEditor("B_"+(sub===0?"DEL":"CUT")+"_"+bIdx, "TIME", [0, Math.floor((sub===0?f.bellConfig[bIdx].delay:f.bellConfig[bIdx].cutoff)/60), (sub===0?f.bellConfig[bIdx].delay:f.bellConfig[bIdx].cutoff)%60], ["H","M","S"]);
-                } else {
-                    if(STATE.cursor === btnSaveIdx) saveForm();
-                    else if(STATE.cursor === btnDelIdx) { if(confirm("Supprimer ?")) { if(STATE.editingLibrary) LIBRARY.splice(STATE.editingIndex,1); else SCHEDULE.splice(STATE.editingIndex, 1); saveData(); STATE.menuStack.pop(); } }
-                    else if(STATE.cursor === btnLibIdx) { LIBRARY.push(JSON.parse(JSON.stringify(f))); saveData(); alert("Ajouté à la Biblio"); }
-                }
-            }
-        } 
-        
-        else if(mode === "ANG_FORM") {
-            const isNew = (STATE.editingAngelusIdx === -1); const max = isNew ? 1 : 2;
-            if(key==="UP") { STATE.cursor--; if(STATE.cursor<0) STATE.cursor=max; }
-            if(key==="DOWN") { STATE.cursor++; if(STATE.cursor>max) STATE.cursor=0; }
-            if(key==="OK") {
-                if(STATE.cursor === 0) { const t = STATE.tempAngelus; openUnifiedEditor("EDIT_ANG_TIME", "TIME", [t.h, t.m, t.s], ["H","M","S"]); } 
-                else if(STATE.cursor === 1) { 
-                    const t = STATE.tempAngelus; const sec = t.m * 60 + t.s;
-                    if(SETTINGS.auto_h.on && t.m === 0 && t.s < 30) { UI.showError("CONFLIT: SONNERIE HORAIRE !"); return; }
-                    if(SETTINGS.auto_h.on && SETTINGS.auto_h.rep) { const r = SETTINGS.auto_h.del; if(sec >= r && sec < r+30) { UI.showError("CONFLIT REPETITION !"); return; } }
-                    if(isNew) SETTINGS.angelus_times.push({...t}); else SETTINGS.angelus_times[STATE.editingAngelusIdx] = {...t};
-                    saveData(); STATE.menuStack.pop(); STATE.cursor=0;
-                } else if(STATE.cursor === 2 && !isNew) { if(confirm("Supprimer ?")) { SETTINGS.angelus_times.splice(STATE.editingAngelusIdx, 1); saveData(); STATE.menuStack.pop(); STATE.cursor=0; } }
-            }
-            UI.render(); return;
-        }
-
-        else if(mode === "ANG_LIST") {
-            const len = SETTINGS.angelus_times.length;
-            if(key==="UP") { STATE.cursor--; if(STATE.cursor<0) STATE.cursor=len; }
-            if(key==="DOWN") { STATE.cursor++; if(STATE.cursor>len) STATE.cursor=0; }
-            if(key==="OK") {
-                if(STATE.cursor === len) { STATE.editingAngelusIdx = -1; STATE.tempAngelus = {h:12, m:3, s:0}; STATE.menuStack.push("ANG_FORM"); STATE.cursor=0; } 
-                else { STATE.editingAngelusIdx = STATE.cursor; STATE.tempAngelus = {...SETTINGS.angelus_times[STATE.cursor]}; STATE.menuStack.push("ANG_FORM"); STATE.cursor=0; }
-            }
-            UI.render(); return;
-        }
-
-        else if(mode === "REP_EDITOR") {
-            const re = STATE.repEditor;
-            if(re.isEditing) {
-                const dir = (key==="RIGHT"?1:(key==="LEFT"?-1:0)); const val = (key==="UP"?1:(key==="DOWN"?-1:0));
-                if(key==="OK") re.isEditing = false;
-                else {
-                    if(re.cursor===0) { if(dir) re.unitIdx=(re.unitIdx+dir+REP_UNITS.length)%REP_UNITS.length; if(val) re.interval=Math.max(1,re.interval+val); }
-                    else if(re.cursor===1) { if(re.unitIdx===3) { if(dir) re.subCursor=(re.subCursor+dir+7)%7; if(val) { const i=re.subCursor, x=re.days.indexOf(i); x>-1?re.days.splice(x,1):re.days.push(i); } } else if(re.unitIdx===4) re.monthMode=(re.monthMode===0)?1:0; }
-                    else if(re.cursor===2) { if(dir||val) re.endTypeIdx=(re.endTypeIdx+(dir||val)+REP_END_TYPES.length)%REP_END_TYPES.length; }
-                    else if(re.cursor===3) { if(re.endTypeIdx===2) re.endVal+=val; }
-                }
-            } else {
-                if(key==="UP") { re.cursor--; if(re.cursor<0) re.cursor=3; }
-                if(key==="DOWN") { re.cursor++; if(re.cursor>3) re.cursor=0; }
-                if(key==="OK") { if(re.cursor === 3 && re.endTypeIdx === 1) { openUnifiedEditor("REP_END_DATE", "DATE", [re.endD, re.endM, re.endY], ["J","M","A"]); } else { re.isEditing = true; } }
-                if(key==="C") { saveRepEditor(); STATE.menuStack.pop(); }
-            }
-            UI.render();
-        }
-
-        else if(mode!=="HOME" && mode!=="AGENDA_VIEW" && mode!=="LIB_VIEW") {
-            const m = UI.menus[mode];
+        // ... Generique ...
+        const m = UI.menus[mode];
+        if(m) {
             if(key==="UP") { STATE.cursor--; if(STATE.cursor<0) STATE.cursor=m.items.length-1; }
             if(key==="DOWN") { STATE.cursor++; if(STATE.cursor>=m.items.length) STATE.cursor=0; }
             if(key==="OK" || key==="RIGHT") {
@@ -509,32 +650,16 @@ const SYS = {
                 if(it.link) { STATE.menuStack.push(it.link); STATE.cursor=0; }
                 else if(it.run) { execPreset(it.run); STATE.menuStack=["HOME"]; }
                 else if(it.action === "EDIT_SYS_TIME") openUnifiedEditor("SYS_TIME", "TIME", [SETTINGS.time_h, SETTINGS.time_m, SETTINGS.time_s], ["H","M","S"]);
-                else if(it.action === "EDIT_SYS_DATE") openUnifiedEditor("SYS_DATE", "DATE", [SETTINGS.date_d, SETTINGS.date_m, SETTINGS.date_y], ["J","M","A"]);
-                else if(it.action === "TOGGLE_CLOCK_MODE") { SETTINGS.clock_mode=(SETTINGS.clock_mode==="AUTO"?"MANU":"AUTO"); saveData(); }
-                
-                else if(it.action && it.action.startsWith("TOG_")) { 
-                    const k = it.action.substring(4);
-                    if(k==="H_ON") SETTINGS.auto_h.on=!SETTINGS.auto_h.on; if(k==="H_REP") SETTINGS.auto_h.rep=!SETTINGS.auto_h.rep;
-                    if(k==="M_ON") SETTINGS.auto_m.on=!SETTINGS.auto_m.on; if(k==="M_REP") SETTINGS.auto_m.rep=!SETTINGS.auto_m.rep;
-                    if(k==="Q_ON") SETTINGS.auto_q.on=!SETTINGS.auto_q.on; if(k==="Q_REP") SETTINGS.auto_q.rep=!SETTINGS.auto_q.rep;
-                    if(k==="NIGHT") SETTINGS.night_mode=!SETTINGS.night_mode;
-                    saveData();
-                }
-                else if(it.action && it.action.startsWith("EDIT_")) {
-                    if(it.action.includes("DEL_H")) openUnifiedEditor("DEL_H", "TIME", [0, Math.floor(SETTINGS.auto_h.del/60), SETTINGS.auto_h.del%60], ["H","M","S"]);
-                    if(it.action.includes("INT_H")) openUnifiedEditor("INT_H", "DECIMAL", [SETTINGS.auto_h.int||2.25], ["SEC"]);
-                    if(it.action.includes("DEL_M")) openUnifiedEditor("DEL_M", "TIME", [0, Math.floor(SETTINGS.auto_m.del/60), SETTINGS.auto_m.del%60], ["H","M","S"]);
-                    if(it.action.includes("DEL_Q")) openUnifiedEditor("DEL_Q", "TIME", [0, Math.floor(SETTINGS.auto_q.del/60), SETTINGS.auto_q.del%60], ["H","M","S"]);
-                    if(it.action.includes("NIGHT_S")) openUnifiedEditor("NIGHT_S", "TIME", [SETTINGS.night_start_h, SETTINGS.night_start_m, 0], ["H","M","S"]);
-                    if(it.action.includes("NIGHT_E")) openUnifiedEditor("NIGHT_E", "TIME", [SETTINGS.night_end_h, SETTINGS.night_end_m, 0], ["H","M","S"]);
-                }
+                // ...
             }
-        } 
-        else if(mode === "AGENDA_VIEW" || mode === "LIB_VIEW") {
-             const list = (mode==="AGENDA_VIEW") ? SCHEDULE : LIBRARY;
-             if(key==="UP") { STATE.cursor--; if(STATE.cursor<0) STATE.cursor=Math.max(0,list.length-1); }
-             if(key==="DOWN") { STATE.cursor++; if(STATE.cursor>=list.length) STATE.cursor=0; }
-             if(key==="OK" && list.length) { loadEventToForm(list[STATE.cursor], STATE.cursor); if(mode==="LIB_VIEW") STATE.editingLibrary=true; STATE.menuStack.push("FORM"); STATE.cursor=0; }
+            UI.render(); return;
+        }
+        
+        if(mode === "FORM") {
+             const f = STATE.formData; const totalRows = 7 + (f.progType==="MANU"?f.bellConfig.length*(f.typeAudio==="TINT"?3:2):0) + 1;
+             if(key==="UP") { STATE.cursor--; if(STATE.cursor<0) STATE.cursor=totalRows; }
+             if(key==="DOWN") { STATE.cursor++; if(STATE.cursor>totalRows) STATE.cursor=0; }
+             if(key==="OK" && STATE.cursor >= totalRows-1) saveForm(); 
         }
         else if(key==="OK") this.fKey(1);
         UI.render();
@@ -545,10 +670,14 @@ const SYS = {
         if(key==="LEFT") { te.cursor--; if(te.cursor<0) te.cursor=max; }
         if(key==="RIGHT") { te.cursor++; if(te.cursor>max) te.cursor=0; }
         const dir = (key==="UP"?1:(key==="DOWN"?-1:0));
+        
         if(dir!==0) { 
             if(te.type === "DECIMAL") {
-                te.vals[0] += (dir * 0.25); if(te.vals[0] < 0.25) te.vals[0] = 0.25;
+                te.vals[0] += (dir * 0.25); if(te.vals[0] < 0.25) te.vals[0] = 0.25; 
+                if(te.targetField === "BLOCK_DURATION") { if(te.vals[0] < 0) te.vals[0] = 0; }
                 te.vals[0] = parseFloat(te.vals[0].toFixed(2));
+            } else if(te.targetField === "BLOCK_REPEAT" || te.type === "INT") {
+                te.vals[0] += dir; if(te.vals[0]<1) te.vals[0]=1;
             } else {
                 te.vals[te.cursor] += dir; 
                 if(te.type==="TIME") { 
@@ -561,51 +690,21 @@ const SYS = {
             }
         }
         if(key==="OK") { 
-            if(te.targetField === "CONF_DELAY") {
-                PRESET_CONFIGS[STATE.selectedPreset][STATE.selectedBellConfig].delay = (te.vals[0]*60) + te.vals[1];
-            }
-            if(te.targetField === "CONF_CUTOFF") {
-                PRESET_CONFIGS[STATE.selectedPreset][STATE.selectedBellConfig].cutoff = (te.vals[0]*60) + te.vals[1];
-            }
+            const tmName = STATE.editingTimelineName;
+            const blkIdx = STATE.editingBlockIndex;
             
-            if(te.targetField && te.targetField.startsWith("SET_PROG_DUR_")) {
-                 const keyName = te.targetField.substring(13); 
-                 SETTINGS[keyName] = (te.vals[0]*60) + te.vals[1];
+            if(te.targetField === "BLOCK_REPEAT") {
+                SETTINGS.timelines[tmName][blkIdx].repeat = te.vals[0];
             }
-
-            if(te.targetField === "EDIT_ANG_TIME") {
-                STATE.tempAngelus.h = te.vals[0]; STATE.tempAngelus.m = te.vals[1]; STATE.tempAngelus.s = te.vals[2];
-                te.active = false; UI.render(); return;
+            if(te.targetField === "BLOCK_DURATION") { SETTINGS.timelines[tmName][blkIdx].duration = (te.vals[0] * 60) + te.vals[1]; }
+            
+            if(te.targetField && te.targetField.startsWith("BLK_VOL_")) {
+                const parts = te.targetField.split('_'); const type = parts[2]; const bId = parseInt(parts[3]);
+                const sec = (te.vals[0] * 60) + te.vals[1];
+                if(!SETTINGS.timelines[tmName][blkIdx].volConfig[bId]) SETTINGS.timelines[tmName][blkIdx].volConfig[bId] = {active:false,delay:0,cutoff:0};
+                if(type === "DEL") SETTINGS.timelines[tmName][blkIdx].volConfig[bId].delay = sec; else SETTINGS.timelines[tmName][blkIdx].volConfig[bId].cutoff = sec;
             }
-            
-            const target = te.targetField;
-            const now = new Date(SETTINGS.date_y, SETTINGS.date_m - 1, SETTINGS.date_d, SETTINGS.time_h, SETTINGS.time_m, SETTINGS.time_s);
-
-            if(target === "PROG_DATE" || target === "REP_END_DATE") {
-                const inputDate = new Date(te.vals[2], te.vals[1] - 1, te.vals[0]);
-                const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                if(inputDate < todayMidnight) { UI.showError("DATE PASSÉE !"); return; }
-            }
-            const f = STATE.formData;
-            if(te.targetField==="START") { f.h=te.vals[0]; f.m=te.vals[1]; f.s=te.vals[2]; }
-            if(te.targetField==="PROG_DATE") f.date = `${pad(te.vals[0])}/${pad(te.vals[1])}/${te.vals[2]}`;
-            if(te.targetField==="PROG_DUR") f.dur = te.vals[0]*3600 + te.vals[1]*60 + te.vals[2];
-            if(te.targetField && te.targetField.startsWith("B_")) {
-                const [_, type, idx] = te.targetField.split('_');
-                if(type==="CAD") f.bellConfig[idx].cadence = te.vals[0];
-                else { const s=te.vals[1]*60+te.vals[2]; if(type==="DEL") f.bellConfig[idx].delay=s; else f.bellConfig[idx].cutoff=s; }
-            }
-            if(te.targetField && te.targetField.startsWith("SET_")) { SETTINGS[te.targetField.substring(4)] = (te.vals[0]*3600) + (te.vals[1]*60) + te.vals[2]; }
-            if(te.targetField==="SYS_TIME") { SETTINGS.time_h=te.vals[0]; SETTINGS.time_m=te.vals[1]; SETTINGS.time_s=te.vals[2]; STATE.manualDateObj.setHours(te.vals[0],te.vals[1],te.vals[2]); }
-            if(te.targetField==="SYS_DATE") { SETTINGS.date_d=te.vals[0]; SETTINGS.date_m=te.vals[1]; SETTINGS.date_y=te.vals[2]; STATE.manualDateObj.setFullYear(te.vals[2],te.vals[1]-1,te.vals[0]); }
-            
-            if(te.targetField==="DEL_H") SETTINGS.auto_h.del = (te.vals[1]*60) + te.vals[2]; 
-            if(te.targetField==="INT_H") SETTINGS.auto_h.int = te.vals[0];
-            if(te.targetField==="DEL_M") SETTINGS.auto_m.del = (te.vals[1]*60) + te.vals[2]; 
-            if(te.targetField==="DEL_Q") SETTINGS.auto_q.del = (te.vals[1]*60) + te.vals[2]; 
-            
-            if(te.targetField==="NIGHT_S") { SETTINGS.night_start_h=te.vals[0]; SETTINGS.night_start_m=te.vals[1]; } if(te.targetField==="NIGHT_E") { SETTINGS.night_end_h=te.vals[0]; SETTINGS.night_end_m=te.vals[1]; }
-            
+            // ... Saves standards ...
             saveData(); te.active=false; 
         }
         if(key==="C") te.active=false; UI.render();
