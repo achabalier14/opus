@@ -1,5 +1,5 @@
 // =============================================================================
-// UI.JS - INTERFACE COMPLETE (V103 - VISUAL FIX & CHOICE MENU)
+// UI.JS - INTERFACE V104 (FIX VOLÉE DUREE DIRECTE)
 // =============================================================================
 
 const UI = {
@@ -67,7 +67,7 @@ const UI = {
 
         const mode = STATE.menuStack[STATE.menuStack.length-1];
 
-        // --- MENU DE CHOIX : TYPE DE FIN (DUREE ou BOUCLE) ---
+        // --- MENU DE CHOIX : TYPE DE FIN (POUR TINTEMENT) ---
         if(mode === "SEQ_END_CHOICE") {
             let h = `<div class="menu-title">CHOISIR TYPE FIN</div>`;
             h += `<div class="menu-item ${STATE.cursor===0?'selected':''}"><span>1. PAR DUREE (TEMPS)</span></div>`;
@@ -75,20 +75,19 @@ const UI = {
             scr.innerHTML = h; return;
         }
 
-        // --- VUE TIMELINE (LISTE DES BLOCS) ---
+        // --- VUE TIMELINE ---
         if(mode === "TIMELINE_VIEW") {
             const tmName = STATE.editingTimelineName;
             const timeline = SETTINGS.timelines[tmName] || [];
             
             let h = `<div class="menu-title">${tmName}: SEQUENCES</div>`;
-            // Scroll unique via page principale
             h += `<div style="width:100%;">`;
             
             if(timeline.length === 0) h += `<div class="menu-item"><span>(VIDE)</span></div>`;
             
             timeline.forEach((block, idx) => {
                 const isLast = (idx === timeline.length - 1);
-                // Affichage intelligent de la durée / répétition
+                // Affichage intelligent
                 let durTxt = "";
                 if(isLast && block.mode!=="LOOP") durTxt = "INFINI ♾️";
                 else if(block.mode === "LOOP") durTxt = (block.repeat||1) + " FOIS";
@@ -134,7 +133,7 @@ const UI = {
                 } else {
                     steps.forEach((step, idx) => {
                         const isSel = (STATE.cursor === idx);
-                        // AJOUT PADDING-RIGHT pour éviter superposition curseur
+                        // PADDING-RIGHT 30px pour visibilité PAUSE
                         h += `<div class="agenda-row ${isSel?'selected':''}" style="justify-content:space-between; padding:8px 5px; white-space:nowrap;">
                                 <div style="display:flex; align-items:center;">
                                     <span style="color:#888; font-size:0.8em; margin-right:5px;">${idx+1}.</span>
@@ -152,7 +151,6 @@ const UI = {
             // --- CAS 2 : VOLEE (VOL) - GRILLE ---
             else if(block.type === "VOL") {
                 const conf = block.volConfig || {};
-                // PADDING-RIGHT AUGMENTÉ (30px)
                 h += `<div style="display:flex; font-size:0.7em; color:#888; padding:0 5px; margin-bottom:5px;">
                         <span style="width:60px;">ETAT</span>
                         <span style="flex:1; text-align:center;">DEPART</span>
@@ -184,44 +182,46 @@ const UI = {
             }
             h += `</div>`; 
             
-            // MENU ACTIONS (ORDRE MODIFIÉ pour SEQ)
+            // MENU ACTIONS
             const maxItm = (block.type==="SEQ") ? block.steps.length : 15;
-            
-            // Calcul Label Durée / Boucle
-            let durLabel = "";
-            if(isLast && block.mode!=="LOOP") durLabel = "FIN: INFINI (DUREE)";
-            else if(block.mode === "LOOP") durLabel = `FIN: ${block.repeat} REPETITION(S)`;
-            else durLabel = `FIN: ${secToMinSec(block.duration||0)} (DUREE)`;
-
-            let parLabel = block.parallel ? "SUITE: EN MEME TPS ⚡" : "SUITE: ATTENDRE ⬇";
-
-            // BOUTON 1 : AJOUTER ETAPE (SI SEQ) - PRIORITÉ 1 (DEMANDE USER)
             let buttonCursorBase = maxItm;
+
+            // BOUTON 1 : AJOUTER ETAPE (SI SEQ UNIQUEMENT)
             if(block.type==="SEQ") {
                 h += `<div class="save-btn-row ${STATE.cursor===buttonCursorBase ? 'selected':''}" style="color:#2ecc71;">[ + AJOUTER ETAPE ]</div>`;
                 buttonCursorBase++;
             }
 
-            // BOUTON 2 : DUREE / BOUCLE
-            // Décalage d'index si SEQ
-            let idxDur = buttonCursorBase;
-            h += `<div class="save-btn-row ${STATE.cursor===idxDur ? 'selected':''}" style="color:#3498db;">[ ${durLabel} ]</div>`;
+            // Calcul Label Durée / Boucle
+            let durLabel = "";
+            if (block.type === "VOL") {
+                // Pour VOL, toujours en temps, pas de mode Loop visible
+                durLabel = isLast ? "DUREE: INFINI (AUTO)" : `DUREE: ${secToMinSec(block.duration||0)}`;
+            } else {
+                // Pour SEQ
+                if(isLast && block.mode!=="LOOP") durLabel = "FIN: INFINI (DUREE)";
+                else if(block.mode === "LOOP") durLabel = `FIN: ${block.repeat} REPETITION(S)`;
+                else durLabel = `FIN: ${secToMinSec(block.duration||0)} (DUREE)`;
+            }
+
+            // BOUTON 2 : DUREE / FIN
+            h += `<div class="save-btn-row ${STATE.cursor===buttonCursorBase ? 'selected':''}" style="color:#3498db;">[ ${durLabel} ]</div>`;
             buttonCursorBase++;
             
             // BOUTON 3 : PARALLELE
-            let idxPar = buttonCursorBase;
-            h += `<div class="save-btn-row ${STATE.cursor===idxPar ? 'selected':''}" style="color:#9b59b6;">[ ${parLabel} ]</div>`;
+            let parLabel = block.parallel ? "SUITE: EN MEME TPS ⚡" : "SUITE: ATTENDRE ⬇";
+            h += `<div class="save-btn-row ${STATE.cursor===buttonCursorBase ? 'selected':''}" style="color:#9b59b6;">[ ${parLabel} ]</div>`;
             buttonCursorBase++;
             
             // BOUTON 4 : RETOUR
-            let idxRet = buttonCursorBase;
-            h += `<div class="save-btn-row ${STATE.cursor===idxRet ? 'selected':''}" style="color:#e74c3c;">[ RETOUR ]</div>`;
+            h += `<div class="save-btn-row ${STATE.cursor===buttonCursorBase ? 'selected':''}" style="color:#e74c3c;">[ RETOUR ]</div>`;
             
             scr.innerHTML = h; 
             const sel = document.querySelector('.selected'); if(sel) sel.scrollIntoView({block:"nearest"});
             return;
         }
 
+        // --- ACCES DIRECT ---
         if(mode === "SET_PROGS_LIST") {
             let h = `<div class="menu-title">CHOIX PROGRAMME</div>`;
             const allowedProgs = ["MESSE", "MARIAGE", "BAPTEME", "PLENUM", "ANGELUS", "GLAS", "TE_DEUM", "TOCSIN"];
@@ -231,7 +231,7 @@ const UI = {
             scr.innerHTML = h; const sel = document.querySelector('.selected'); if(sel) sel.scrollIntoView({block:"nearest"}); return;
         }
 
-        // SET_PROG_ROOT est supprimé de la navigation mais le code reste pour compatibilité
+        // MENUS LEAGCY (CODE MORT MAIS GARDE POUR COMPATIBILITE)
         if(mode === "SET_PROG_ROOT") {
             const pName = STATE.selectedPreset;
             let h = `<div class="menu-title">CONFIG: ${pName}</div>`;
@@ -239,8 +239,6 @@ const UI = {
             h += `<div class="menu-item ${STATE.cursor===1?'selected':''}"><span>(Legacy) VOLEE ></span></div>`;
             scr.innerHTML = h; return;
         }
-
-        // MENUS LEAGCY (GARDÉS)
         if(mode === "SET_PROG_BELLS") {
             const pName = STATE.selectedPreset;
             let h = `<div class="menu-title">${pName}: VOLEE</div>`;
@@ -252,7 +250,6 @@ const UI = {
             }
             scr.innerHTML = h; return;
         }
-
         if(mode === "SET_PROG_PARAM") {
             const pName = STATE.selectedPreset;
             const bId = STATE.selectedBellConfig;
@@ -515,7 +512,7 @@ const SYS = {
             STATE.menuStack.pop(); if(!STATE.menuStack.length) STATE.menuStack=["HOME"]; STATE.cursor=0; UI.render(); return; 
         }
 
-        // --- NAVIGATION CHOIX TYPE FIN (NOUVEAU) ---
+        // --- NAVIGATION CHOIX TYPE FIN ---
         if(mode === "SEQ_END_CHOICE") {
             if(key==="UP" || key==="DOWN") { STATE.cursor = (STATE.cursor===0) ? 1 : 0; }
             if(key==="OK") {
@@ -609,6 +606,7 @@ const SYS = {
                 if(key==="OK") {
                     if(STATE.cursor < 15) {
                         const bId = Math.floor(STATE.cursor / 3) + 1; const sub = STATE.cursor % 3;
+                        
                         if(!block.volConfig[bId]) block.volConfig[bId] = {active:false, delay:0, cutoff:0};
                         const conf = block.volConfig[bId];
                         
@@ -616,8 +614,9 @@ const SYS = {
                         else if(sub === 1) openUnifiedEditor("BLK_VOL_DEL_"+bId, "MIN_SEC", [Math.floor(conf.delay/60), conf.delay%60], ["MIN","SEC"]);
                         else if(sub === 2) openUnifiedEditor("BLK_VOL_CUT_"+bId, "MIN_SEC", [Math.floor(conf.cutoff/60), conf.cutoff%60], ["MIN","SEC"]);
                     }
-                    else if(STATE.cursor === 15) { // DUREE -> MENU CHOIX
-                        STATE.menuStack.push("SEQ_END_CHOICE"); STATE.cursor=0;
+                    else if(STATE.cursor === 15) { // DUREE (DIRECT POUR VOL)
+                        let m=Math.floor(block.duration/60), s=Math.floor(block.duration%60);
+                        openUnifiedEditor("BLOCK_DURATION", "MIN_SEC", [m, s], ["MIN","SEC"]);
                     }
                     else if(STATE.cursor === 16) { block.parallel = !block.parallel; saveData(); }
                     else if(STATE.cursor === 17) { STATE.menuStack.pop(); STATE.cursor=0; }
@@ -704,7 +703,26 @@ const SYS = {
                 if(!SETTINGS.timelines[tmName][blkIdx].volConfig[bId]) SETTINGS.timelines[tmName][blkIdx].volConfig[bId] = {active:false,delay:0,cutoff:0};
                 if(type === "DEL") SETTINGS.timelines[tmName][blkIdx].volConfig[bId].delay = sec; else SETTINGS.timelines[tmName][blkIdx].volConfig[bId].cutoff = sec;
             }
-            // ... Saves standards ...
+            if(te.targetField === "CONF_DELAY") { PRESET_CONFIGS[STATE.selectedPreset][STATE.selectedBellConfig].delay = (te.vals[0]*60) + te.vals[1]; }
+            if(te.targetField === "CONF_CUTOFF") { PRESET_CONFIGS[STATE.selectedPreset][STATE.selectedBellConfig].cutoff = (te.vals[0]*60) + te.vals[1]; }
+            if(te.targetField && te.targetField.startsWith("SET_PROG_DUR_")) { SETTINGS[te.targetField.substring(13)] = (te.vals[0]*60) + te.vals[1]; }
+            if(te.targetField === "EDIT_ANG_TIME") { STATE.tempAngelus.h = te.vals[0]; STATE.tempAngelus.m = te.vals[1]; STATE.tempAngelus.s = te.vals[2]; te.active = false; UI.render(); return; }
+            
+            const f = STATE.formData;
+            if(te.targetField==="START") { f.h=te.vals[0]; f.m=te.vals[1]; f.s=te.vals[2]; }
+            if(te.targetField==="PROG_DATE") f.date = `${pad(te.vals[0])}/${pad(te.vals[1])}/${te.vals[2]}`;
+            if(te.targetField==="PROG_DUR") f.dur = te.vals[0]*3600 + te.vals[1]*60 + te.vals[2];
+            if(te.targetField && te.targetField.startsWith("B_")) { const [_, type, idx] = te.targetField.split('_'); if(type==="CAD") f.bellConfig[idx].cadence = te.vals[0]; else { const s=te.vals[1]*60+te.vals[2]; if(type==="DEL") f.bellConfig[idx].delay=s; else f.bellConfig[idx].cutoff=s; } }
+            if(te.targetField && te.targetField.startsWith("SET_")) { SETTINGS[te.targetField.substring(4)] = (te.vals[0]*3600) + (te.vals[1]*60) + te.vals[2]; }
+            if(te.targetField==="SYS_TIME") { SETTINGS.time_h=te.vals[0]; SETTINGS.time_m=te.vals[1]; SETTINGS.time_s=te.vals[2]; STATE.manualDateObj.setHours(te.vals[0],te.vals[1],te.vals[2]); }
+            if(te.targetField==="SYS_DATE") { SETTINGS.date_d=te.vals[0]; SETTINGS.date_m=te.vals[1]; SETTINGS.date_y=te.vals[2]; STATE.manualDateObj.setFullYear(te.vals[2],te.vals[1]-1,te.vals[0]); }
+            
+            if(te.targetField==="DEL_H") SETTINGS.auto_h.del = (te.vals[1]*60) + te.vals[2]; 
+            if(te.targetField==="INT_H") SETTINGS.auto_h.int = te.vals[0];
+            if(te.targetField==="DEL_M") SETTINGS.auto_m.del = (te.vals[1]*60) + te.vals[2]; 
+            if(te.targetField==="DEL_Q") SETTINGS.auto_q.del = (te.vals[1]*60) + te.vals[2]; 
+            if(te.targetField==="NIGHT_S") { SETTINGS.night_start_h=te.vals[0]; SETTINGS.night_start_m=te.vals[1]; } if(te.targetField==="NIGHT_E") { SETTINGS.night_end_h=te.vals[0]; SETTINGS.night_end_m=te.vals[1]; }
+            
             saveData(); te.active=false; 
         }
         if(key==="C") te.active=false; UI.render();
