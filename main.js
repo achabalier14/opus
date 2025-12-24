@@ -1,5 +1,5 @@
 // =============================================================================
-// MAIN.JS - LOGIQUE PRINCIPALE (V81 - COMPLETE)
+// MAIN.JS - LOGIQUE PRINCIPALE (V83 - COMPLET & DEFINITIF)
 // =============================================================================
 
 async function INIT_SYSTEM() {
@@ -31,7 +31,7 @@ async function INIT_SYSTEM() {
 }
 
 function saveData() {
-    // On sauvegarde aussi les PRESET_CONFIGS désormais
+    // On sauvegarde aussi les PRESET_CONFIGS (vos réglages de délais/cloches)
     const data = { schedule: SCHEDULE, library: LIBRARY, settings: SETTINGS, presets: PRESET_CONFIGS };
     localStorage.setItem("OPUS_DATA", JSON.stringify(data));
 }
@@ -215,8 +215,15 @@ function checkSchedule(h, m, s, d, mo, y) {
                 evt.lastRun = `${h}:${m}:${s}:${d}`; 
                 saveData(); 
                 if(STATE.isChiming) return; 
-                if(evt.progType==="MANU") execComplexManual(evt); 
-                else execPreset(evt.name, evt.dur); 
+                
+                if(evt.progType==="MANU") {
+                    execComplexManual(evt); 
+                } else {
+                    // C'est ici que l'on relie l'événement agenda (ex: "MESSE 2") 
+                    // à sa configuration technique (ex: "MESSE")
+                    const configName = (evt.progType === "PRESET" && evt.presetName) ? evt.presetName : evt.name;
+                    execPreset(configName, evt.dur); 
+                }
             }
         }
     });
@@ -268,10 +275,7 @@ async function execComplexManual(evt) {
     setTimeout(() => { STATE.isChiming = false; document.getElementById('screen-footer').innerText = "PRET."; }, evt.dur * 1000);
 }
 
-// =============================================================================
-// FONCTION EXECPRESET MISE A JOUR (POUR GERER VOS REGLAGES PERSO)
-// =============================================================================
-
+// Fonction Principale d'Exécution des Programmes (Messe, Mariage...)
 async function execPreset(name, customDur) {
     if(STATE.isChiming && name !== "ANGELUS") return; 
     
@@ -281,6 +285,7 @@ async function execPreset(name, customDur) {
     
     let dur = customDur;
     if(!dur) {
+        // Durées par défaut (chargées depuis les paramètres)
         if(name==="ANGELUS") dur = SETTINGS.dur_angelus;
         else if(name==="MESSE") dur = SETTINGS.dur_messe;
         else if(name==="MARIAGE") dur = SETTINGS.dur_mariage;
@@ -295,7 +300,7 @@ async function execPreset(name, customDur) {
     // --- SONNERIES RYTHMIQUES (Restent codées en dur pour le rythme) ---
     
     if(name === "ANGELUS") {
-        const B = 2; // Cloche 2 pour les coups
+        const B = 2; // Cloche de frappe pour l'Angelus
         for(let s=0; s<3; s++) { 
             for(let c=0; c<3; c++) { 
                 if(STATE.stopSignal) break; 
@@ -305,7 +310,7 @@ async function execPreset(name, customDur) {
             await wait(4000); 
         }
         await wait(2000); 
-        // La volée finale utilise maintenant votre configuration !
+        // La volée finale utilise maintenant la CONFIGURATION (Délais/Arrêts)
         if(!STATE.stopSignal) { 
             await runDynamicVolley("ANGELUS", dur);
         }
@@ -329,8 +334,7 @@ async function execPreset(name, customDur) {
         while(Date.now() < endTime && !STATE.stopSignal) { AUDIO.tinte(2); await wait(3000); AUDIO.tinte(2); await wait(7000); }
     }
     
-    // --- SONNERIES DE VOLÉE (UTILISENT VOS REGLAGES) ---
-    // Messe, Mariage, Bapteme, Plenum
+    // --- SONNERIES DE VOLÉE CLASSIQUES (MESSE, PLENUM, ETC.) ---
     else { 
         await runDynamicVolley(name, dur);
     }
@@ -339,12 +343,12 @@ async function execPreset(name, customDur) {
     document.getElementById('screen-footer').innerText = "PRET.";
 }
 
-// NOUVELLE FONCTION QUI LIT VOTRE CONFIGURATION (PRESET_CONFIGS)
+// Fonction qui exécute la volée en respectant vos configurations (délais, coupures)
 function runDynamicVolley(presetName, globalDuration) {
     return new Promise((resolve) => {
         const config = PRESET_CONFIGS[presetName];
         if(!config) { 
-            // Sécurité : si pas de config, on sonne tout par défaut
+            // Sécurité : si pas de config trouvée, on sonne tout par défaut
             for(let i=1;i<=5;i++) AUDIO.start(i);
             setTimeout(() => { for(let i=1;i<=5;i++) AUDIO.stop(i); resolve(); }, globalDuration*1000);
             return; 
@@ -353,7 +357,6 @@ function runDynamicVolley(presetName, globalDuration) {
         const globalEndTime = Date.now() + (globalDuration * 1000);
         let activeCounts = 0;
 
-        // On parcourt les 5 cloches possibles
         for(let i=1; i<=5; i++) {
             const bellConf = config[i];
             if(bellConf && bellConf.active) {
@@ -362,7 +365,7 @@ function runDynamicVolley(presetName, globalDuration) {
                 const delayMs = (bellConf.delay || 0) * 1000;
                 const cutoffMs = (bellConf.cutoff || 0) * 1000;
                 
-                // Calcul de la durée spécifique pour cette cloche
+                // Durée de vie spécifique de cette cloche
                 const myDuration = (globalDuration * 1000) - delayMs - cutoffMs;
 
                 if(myDuration > 0) {
@@ -386,9 +389,9 @@ function runDynamicVolley(presetName, globalDuration) {
             }
         }
         
-        // On attend la fin globale (+ marge) pour rendre la main
+        // On attend la fin globale (+ marge de sécurité)
         setTimeout(() => {
-            for(let i=1; i<=5; i++) AUDIO.stop(i); // Sécurité finale
+            for(let i=1; i<=5; i++) AUDIO.stop(i); 
             resolve();
         }, globalDuration * 1000 + 1000); 
     });

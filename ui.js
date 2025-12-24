@@ -1,5 +1,5 @@
 // =============================================================================
-// UI.JS - INTERFACE (V82 - MENU PROGRAMME UNIFIÉ & SIMPLIFIÉ)
+// UI.JS - INTERFACE (V84 - CORRECTION HEURE DEFAUT & NOM)
 // =============================================================================
 
 const UI = {
@@ -7,10 +7,7 @@ const UI = {
         'HOME': { type: "static" },
         'MAIN': { title: "MENU PRINCIPAL", items: [ { t: "➕ PROGRAMMES", link: "PROGS" }, { t: "📅 AGENDA", link: "AGENDA_VIEW" }, { t: "⚙️ PARAMETRES", link: "SETTINGS" }, { t: "📚 BIBLIOTHEQUE", link: "LIB_VIEW" } ]},
         'PROGS': { title: "CHOIX PROG", items: [ { t: "🔔 ANGELUS", run: "ANGELUS" }, { t: "⛪ MESSE", run: "MESSE" }, { t: "💍 MARIAGE", run: "MARIAGE" }, { t: "👶 BAPTEME", run: "BAPTEME" }, { t: "🎉 PLENUM (FETES)", run: "PLENUM" }, { t: "⚰️ GLAS (STD)", run: "GLAS" }, { t: "🎶 TE DEUM", run: "TE_DEUM" }, { t: "🔥 TOCSIN (ALERTE)", run: "TOCSIN" } ]},
-        
-        // MODIFICATION ICI : Suppression de "DUREES PROG"
         'SETTINGS': { title: "PARAMETRES", items: [ { t: "🛠️ CONFIG. PROGRAMMES", link: "SET_PROGS_LIST" }, { t: "🕒 HORLOGE SYSTEME", link: "SET_CLOCK" }, { t: "🤖 AUTOMATISMES", link: "SET_AUTO" }, { t: "🌙 MODE NUIT", link: "SET_NIGHT" } ]},
-        
         'SET_CLOCK': { title: "REGLAGE HORLOGE", items: [ { t: "Mode: ", action: "TOGGLE_CLOCK_MODE" }, { t: "REGLER HEURE", action: "EDIT_SYS_TIME" }, { t: "REGLER DATE", action: "EDIT_SYS_DATE" } ]},
         'SET_AUTO': { title: "AUTOMATISMES", items: [ { t: "🔔 SONNERIE HORAIRE >", link: "SET_AUTO_CHIME" }, { t: "⛪ ANGELUS >", link: "ANG_LIST" } ]},
         'SET_AUTO_CHIME': { title: "SONNERIE HORAIRE", items: [ { t: "HEURES >", link: "SET_AUTO_H" }, { t: "DEMIES >", link: "SET_AUTO_M" }, { t: "QUARTS >", link: "SET_AUTO_Q" } ]},
@@ -47,7 +44,7 @@ const UI = {
             const te = STATE.timeEditor;
             let title = "REGLAGE";
             if(te.type==="TIME") title = "VALEUR (H:M:S)";
-            if(te.type==="MIN_SEC") title = "VALEUR (MIN:SEC)"; // Nouveau Titre
+            if(te.type==="MIN_SEC") title = "VALEUR (MIN:SEC)";
             if(te.type==="DATE") title = "REGLAGE DATE";
             if(te.type==="INT") title = "VALEUR (SEC)";
             if(te.type==="DECIMAL") title = "INTERVALLE (SEC)";
@@ -62,37 +59,26 @@ const UI = {
 
         const mode = STATE.menuStack[STATE.menuStack.length-1];
 
-        // --- NOUVEAUX MENUS DYNAMIQUES (V82) ---
-
-        // 1. LISTE DES PROGRAMMES (FILTRÉE : PAS DE TOCSIN/TE DEUM)
         if(mode === "SET_PROGS_LIST") {
             let h = `<div class="menu-title">CHOIX PROGRAMME</div>`;
-            // Liste manuelle des programmes de "Volée" configurables
             const allowedProgs = ["MESSE", "MARIAGE", "BAPTEME", "PLENUM", "ANGELUS", "GLAS"];
             allowedProgs.forEach((k, idx) => {
                 h += `<div class="menu-item ${idx===STATE.cursor?'selected':''}"><span>${k}</span></div>`;
             });
-            scr.innerHTML = h;
-            const sel = document.querySelector('.selected'); if(sel) sel.scrollIntoView({block:"nearest"});
-            return;
+            scr.innerHTML = h; const sel = document.querySelector('.selected'); if(sel) sel.scrollIntoView({block:"nearest"}); return;
         }
 
-        // 2. MENU INTERMEDIAIRE (DUREE + CLOCHES)
         if(mode === "SET_PROG_ROOT") {
             const pName = STATE.selectedPreset;
-            // Récupération de la durée actuelle
             let currentDur = 0;
             const map = {"ANGELUS":"dur_angelus","MESSE":"dur_messe","MARIAGE":"dur_mariage","PLENUM":"dur_plenum","BAPTEME":"dur_bapteme","GLAS":"dur_glas"};
             if(map[pName]) currentDur = SETTINGS[map[pName]];
-
             let h = `<div class="menu-title">CONFIG: ${pName}</div>`;
             h += `<div class="menu-item ${STATE.cursor===0?'selected':''}"><span>DUREE PAR DEFAUT:</span><span>${secToMinSec(currentDur)}</span></div>`;
             h += `<div class="menu-item ${STATE.cursor===1?'selected':''}"><span>REGLER CLOCHES ></span></div>`;
-            
             scr.innerHTML = h; return;
         }
 
-        // 3. LISTE DES CLOCHES (Identique V81)
         if(mode === "SET_PROG_BELLS") {
             const pName = STATE.selectedPreset;
             let h = `<div class="menu-title">${pName}: CLOCHES</div>`;
@@ -105,24 +91,18 @@ const UI = {
             scr.innerHTML = h; return;
         }
 
-        // 4. PARAMETRES DE LA CLOCHE (Modifié : Min/Sec uniquement)
         if(mode === "SET_PROG_PARAM") {
             const pName = STATE.selectedPreset;
             const bId = STATE.selectedBellConfig;
             const conf = PRESET_CONFIGS[pName][bId];
-            
-            // Fonction d'affichage simplifiée (Min:Sec)
             const showMS = (s) => `${pad(Math.floor(s/60))}:${pad(s%60)}`;
-
             let h = `<div class="menu-title">${pName} > CLOCHE ${bId}</div>`;
             h += `<div class="menu-item ${STATE.cursor===0?'selected':''}"><span>Active: </span><span>${conf.active?"OUI":"NON"}</span></div>`;
             h += `<div class="menu-item ${STATE.cursor===1?'selected':''}"><span>Delai Depart: </span><span>${showMS(conf.delay)}</span></div>`;
             h += `<div class="menu-item ${STATE.cursor===2?'selected':''}"><span>Arret Avant: </span><span>${showMS(conf.cutoff)}</span></div>`;
-            
             scr.innerHTML = h; return;
         }
 
-        // --- (Reste du code standard UI) ---
         if(mode === "HOME") { this.renderHome(SETTINGS.time_h, SETTINGS.time_m, SETTINGS.time_s, getHomeDateStr()); return; }
 
         if(mode === "AGENDA_VIEW" || mode === "LIB_VIEW") {
@@ -299,17 +279,68 @@ const SYS = {
         if (STATE.manualMode === "TINT") AUDIO.tinte(n); else { const eng = STATE.engines[n]; if (eng.isSwinging) AUDIO.stop(n); else AUDIO.start(n); }
     },
     stopAll: () => AUDIO.stopAll(),
+    
+    // CORRECTION F2/F3 : Heure réelle + Nom "Sonnerie manuel"
     fKey: function(n) {
         STATE.editingIndex = -1; STATE.cursor = 0; STATE.timeEditor.active = false;
+        
+        // 1. Calcul de l'heure exacte (basée sur l'affichage réel)
+        let nowH, nowM;
+        if(SETTINGS.clock_mode === "AUTO") {
+            const d = new Date();
+            nowH = d.getHours(); nowM = d.getMinutes();
+        } else {
+            // En mode manuel, on prend l'heure qui est affichée (celle de l'objet de simulation)
+            nowH = STATE.manualDateObj.getHours(); 
+            nowM = STATE.manualDateObj.getMinutes();
+        }
+        
+        // 2. On ajoute 1 minute
+        let defM = nowM + 1;
+        let defH = nowH;
+        if(defM > 59) { defM = 0; defH++; if(defH > 23) defH = 0; }
+        
+        // 3. Générateur de nom unique "Sonnerie manuel X"
+        const getUniqueName = () => {
+            let count = 1;
+            const base = "Sonnerie manuel";
+            const exists = (c) => SCHEDULE.some(e => e.name === `${base} ${c}`) || LIBRARY.some(e => e.name === `${base} ${c}`);
+            while(exists(count)) { count++; }
+            return `${base} ${count}`;
+        };
+
         if(n===1) STATE.menuStack=["MAIN"];
-        if(n===2) { loadEventToForm({type:"PRESET", progType:"PRESET", name:"MESSE", presetName:"MESSE", bells:[1,2,3], dur:SETTINGS.dur_messe, mode:"AUCUNE", date: getCurrentDateStr(), h:9, m:30, s:0}, -1); STATE.menuStack=["FORM"]; }
-        if(n===3) { 
-            const d = new Date(); let count = 1;
-            const nameExists = (c) => SCHEDULE.some(e => e.name === `Sonnerie manuelle ${c}`) || LIBRARY.some(e => e.name === `Sonnerie manuelle ${c}`);
-            while(nameExists(count)) { count++; }
-            loadEventToForm({type:"MANUAL", progType:"MANU", name:`Sonnerie manuelle ${count}`, typeAudio: "VOL", bells:[], bellConfig: [], dur:60, mode:"AUCUNE", date: getCurrentDateStr(), h:d.getHours(), m:d.getMinutes(), s:0}, -1); 
+        
+        if(n===2) { 
+            // PRESET (F2) 
+            loadEventToForm({
+                type:"PRESET", progType:"PRESET", 
+                name: getUniqueName(), // Nom "Sonnerie manuel X"
+                presetName:"MESSE", 
+                bells:[1,2,3], 
+                dur: SETTINGS.dur_messe, // DUREE PAR DEFAUT DE LA MESSE
+                mode:"AUCUNE", 
+                date: getCurrentDateStr(), 
+                h: defH, m: defM, s: 0 // H+1 MIN
+            }, -1); 
             STATE.menuStack=["FORM"]; 
         }
+        
+        if(n===3) { 
+            // MANUAL (F3)
+            loadEventToForm({
+                type:"MANUAL", progType:"MANU", 
+                name: getUniqueName(), // Nom "Sonnerie manuel X"
+                typeAudio: "VOL", 
+                bells:[], bellConfig: [], 
+                dur: 60, 
+                mode:"AUCUNE", 
+                date: getCurrentDateStr(), 
+                h: defH, m: defM, s: 0 // H+1 MIN
+            }, -1); 
+            STATE.menuStack=["FORM"]; 
+        }
+        
         if(n===4) STATE.menuStack=["AGENDA_VIEW"];
         UI.render();
     },
@@ -328,16 +359,13 @@ const SYS = {
             UI.render(); return; 
         }
 
-        // --- NAVIGATION MENU CONFIG PROGRAMMES ---
-        
         if(mode === "SET_PROGS_LIST") {
-            // Liste filtrée des programmes "Volée"
             const allowedProgs = ["MESSE", "MARIAGE", "BAPTEME", "PLENUM", "ANGELUS", "GLAS"];
             if(key==="UP") { STATE.cursor--; if(STATE.cursor<0) STATE.cursor=allowedProgs.length-1; }
             if(key==="DOWN") { STATE.cursor++; if(STATE.cursor>=allowedProgs.length) STATE.cursor=0; }
             if(key==="OK" || key==="RIGHT") {
                 STATE.selectedPreset = allowedProgs[STATE.cursor];
-                STATE.menuStack.push("SET_PROG_ROOT"); // On va au menu racine du programme
+                STATE.menuStack.push("SET_PROG_ROOT");
                 STATE.cursor = 0;
             }
             UI.render(); return;
@@ -348,16 +376,13 @@ const SYS = {
             if(key==="DOWN") { STATE.cursor++; if(STATE.cursor>1) STATE.cursor=0; }
             if(key==="OK" || key==="RIGHT") {
                 if(STATE.cursor === 0) {
-                    // Editer la durée par défaut
                     const pName = STATE.selectedPreset;
                     const map = {"ANGELUS":"dur_angelus","MESSE":"dur_messe","MARIAGE":"dur_mariage","PLENUM":"dur_plenum","BAPTEME":"dur_bapteme","GLAS":"dur_glas"};
                     if(map[pName]) {
                         const val = SETTINGS[map[pName]];
-                        // On ouvre un éditeur MIN:SEC pour la durée
                         openUnifiedEditor("SET_PROG_DUR_"+map[pName], "MIN_SEC", [Math.floor(val/60), val%60], ["MIN","SEC"]);
                     }
                 } else {
-                    // Aller au choix des cloches
                     STATE.menuStack.push("SET_PROG_BELLS");
                     STATE.cursor = 0;
                 }
@@ -369,7 +394,7 @@ const SYS = {
             if(key==="UP") { STATE.cursor--; if(STATE.cursor<0) STATE.cursor=4; }
             if(key==="DOWN") { STATE.cursor++; if(STATE.cursor>4) STATE.cursor=0; }
             if(key==="OK" || key==="RIGHT") {
-                STATE.selectedBellConfig = STATE.cursor + 1; // 1 à 5
+                STATE.selectedBellConfig = STATE.cursor + 1; 
                 STATE.menuStack.push("SET_PROG_PARAM");
                 STATE.cursor = 0;
             }
@@ -383,49 +408,9 @@ const SYS = {
                 const pName = STATE.selectedPreset;
                 const bId = STATE.selectedBellConfig;
                 const conf = PRESET_CONFIGS[pName][bId];
-                
-                if(STATE.cursor===0) { 
-                    conf.active = !conf.active; // Bascule ON/OFF
-                    saveData(); 
-                }
-                else if(STATE.cursor===1) {
-                    // Editer délai départ (MIN:SEC seulement)
-                    openUnifiedEditor("CONF_DELAY", "MIN_SEC", [Math.floor(conf.delay/60), conf.delay%60], ["MIN","SEC"]);
-                }
-                else if(STATE.cursor===2) {
-                    // Editer arrêt avant (MIN:SEC seulement)
-                    openUnifiedEditor("CONF_CUTOFF", "MIN_SEC", [Math.floor(conf.cutoff/60), conf.cutoff%60], ["MIN","SEC"]);
-                }
-            }
-            UI.render(); return;
-        }
-
-        // ... (Reste navigation identique) ...
-        
-        if(mode === "ANG_FORM") {
-            const isNew = (STATE.editingAngelusIdx === -1); const max = isNew ? 1 : 2;
-            if(key==="UP") { STATE.cursor--; if(STATE.cursor<0) STATE.cursor=max; }
-            if(key==="DOWN") { STATE.cursor++; if(STATE.cursor>max) STATE.cursor=0; }
-            if(key==="OK") {
-                if(STATE.cursor === 0) { const t = STATE.tempAngelus; openUnifiedEditor("EDIT_ANG_TIME", "TIME", [t.h, t.m, t.s], ["H","M","S"]); } 
-                else if(STATE.cursor === 1) { 
-                    const t = STATE.tempAngelus; const sec = t.m * 60 + t.s;
-                    if(SETTINGS.auto_h.on && t.m === 0 && t.s < 30) { UI.showError("CONFLIT: SONNERIE HORAIRE !"); return; }
-                    if(SETTINGS.auto_h.on && SETTINGS.auto_h.rep) { const r = SETTINGS.auto_h.del; if(sec >= r && sec < r+30) { UI.showError("CONFLIT REPETITION !"); return; } }
-                    if(isNew) SETTINGS.angelus_times.push({...t}); else SETTINGS.angelus_times[STATE.editingAngelusIdx] = {...t};
-                    saveData(); STATE.menuStack.pop(); STATE.cursor=0;
-                } else if(STATE.cursor === 2 && !isNew) { if(confirm("Supprimer ?")) { SETTINGS.angelus_times.splice(STATE.editingAngelusIdx, 1); saveData(); STATE.menuStack.pop(); STATE.cursor=0; } }
-            }
-            UI.render(); return;
-        }
-
-        if(mode === "ANG_LIST") {
-            const len = SETTINGS.angelus_times.length;
-            if(key==="UP") { STATE.cursor--; if(STATE.cursor<0) STATE.cursor=len; }
-            if(key==="DOWN") { STATE.cursor++; if(STATE.cursor>len) STATE.cursor=0; }
-            if(key==="OK") {
-                if(STATE.cursor === len) { STATE.editingAngelusIdx = -1; STATE.tempAngelus = {h:12, m:3, s:0}; STATE.menuStack.push("ANG_FORM"); STATE.cursor=0; } 
-                else { STATE.editingAngelusIdx = STATE.cursor; STATE.tempAngelus = {...SETTINGS.angelus_times[STATE.cursor]}; STATE.menuStack.push("ANG_FORM"); STATE.cursor=0; }
+                if(STATE.cursor===0) { conf.active = !conf.active; saveData(); }
+                else if(STATE.cursor===1) { openUnifiedEditor("CONF_DELAY", "MIN_SEC", [Math.floor(conf.delay/60), conf.delay%60], ["MIN","SEC"]); }
+                else if(STATE.cursor===2) { openUnifiedEditor("CONF_CUTOFF", "MIN_SEC", [Math.floor(conf.cutoff/60), conf.cutoff%60], ["MIN","SEC"]); }
             }
             UI.render(); return;
         }
@@ -441,7 +426,20 @@ const SYS = {
             const dir = (key==="RIGHT"?1:(key==="LEFT"?-1:0));
             if(dir!==0 && STATE.cursor <= 6) {
                  if(STATE.cursor===1) { f.progType = (f.progType==="MANU"?"PRESET":"MANU"); if(f.progType === "PRESET") f.presetName = "MESSE"; }
-                 if(STATE.cursor===2) { if(f.progType==="PRESET") { let idx = PRESET_NAMES.indexOf(f.presetName); f.presetName = PRESET_NAMES[(idx+dir+PRESET_NAMES.length)%PRESET_NAMES.length]; } else { f.typeAudio = (f.typeAudio==="VOL") ? "TINT" : "VOL"; } }
+                 
+                 // MAJ DYNAMIQUE DUREE
+                 if(STATE.cursor===2) { 
+                     if(f.progType==="PRESET") { 
+                         let idx = PRESET_NAMES.indexOf(f.presetName); 
+                         f.presetName = PRESET_NAMES[(idx+dir+PRESET_NAMES.length)%PRESET_NAMES.length]; 
+                         
+                         const map = {"ANGELUS":"dur_angelus","MESSE":"dur_messe","MARIAGE":"dur_mariage","PLENUM":"dur_plenum","BAPTEME":"dur_bapteme","GLAS":"dur_glas","TE_DEUM":"dur_tedeum","TOCSIN":"dur_tocsin"};
+                         if(map[f.presetName]) f.dur = SETTINGS[map[f.presetName]];
+                     } else { 
+                         f.typeAudio = (f.typeAudio==="VOL") ? "TINT" : "VOL"; 
+                     } 
+                 }
+                 
                  if(f.progType === "MANU" && STATE.cursor===3) { STATE.bellCursor = (STATE.bellCursor+dir+3)%4+1; }
                  if(STATE.cursor===(3+idxOffset)) f.mode = (f.mode==="AUCUNE")?"PERSO":"AUCUNE";
             }
@@ -464,6 +462,34 @@ const SYS = {
             }
         } 
         
+        else if(mode === "ANG_FORM") {
+            const isNew = (STATE.editingAngelusIdx === -1); const max = isNew ? 1 : 2;
+            if(key==="UP") { STATE.cursor--; if(STATE.cursor<0) STATE.cursor=max; }
+            if(key==="DOWN") { STATE.cursor++; if(STATE.cursor>max) STATE.cursor=0; }
+            if(key==="OK") {
+                if(STATE.cursor === 0) { const t = STATE.tempAngelus; openUnifiedEditor("EDIT_ANG_TIME", "TIME", [t.h, t.m, t.s], ["H","M","S"]); } 
+                else if(STATE.cursor === 1) { 
+                    const t = STATE.tempAngelus; const sec = t.m * 60 + t.s;
+                    if(SETTINGS.auto_h.on && t.m === 0 && t.s < 30) { UI.showError("CONFLIT: SONNERIE HORAIRE !"); return; }
+                    if(SETTINGS.auto_h.on && SETTINGS.auto_h.rep) { const r = SETTINGS.auto_h.del; if(sec >= r && sec < r+30) { UI.showError("CONFLIT REPETITION !"); return; } }
+                    if(isNew) SETTINGS.angelus_times.push({...t}); else SETTINGS.angelus_times[STATE.editingAngelusIdx] = {...t};
+                    saveData(); STATE.menuStack.pop(); STATE.cursor=0;
+                } else if(STATE.cursor === 2 && !isNew) { if(confirm("Supprimer ?")) { SETTINGS.angelus_times.splice(STATE.editingAngelusIdx, 1); saveData(); STATE.menuStack.pop(); STATE.cursor=0; } }
+            }
+            UI.render(); return;
+        }
+
+        else if(mode === "ANG_LIST") {
+            const len = SETTINGS.angelus_times.length;
+            if(key==="UP") { STATE.cursor--; if(STATE.cursor<0) STATE.cursor=len; }
+            if(key==="DOWN") { STATE.cursor++; if(STATE.cursor>len) STATE.cursor=0; }
+            if(key==="OK") {
+                if(STATE.cursor === len) { STATE.editingAngelusIdx = -1; STATE.tempAngelus = {h:12, m:3, s:0}; STATE.menuStack.push("ANG_FORM"); STATE.cursor=0; } 
+                else { STATE.editingAngelusIdx = STATE.cursor; STATE.tempAngelus = {...SETTINGS.angelus_times[STATE.cursor]}; STATE.menuStack.push("ANG_FORM"); STATE.cursor=0; }
+            }
+            UI.render(); return;
+        }
+
         else if(mode === "REP_EDITOR") {
             const re = STATE.repEditor;
             if(re.isEditing) {
@@ -545,18 +571,15 @@ const SYS = {
             }
         }
         if(key==="OK") { 
-            // Sauvegarde des nouveaux champs de config
             if(te.targetField === "CONF_DELAY") {
-                // vals[0] = MIN, vals[1] = SEC
                 PRESET_CONFIGS[STATE.selectedPreset][STATE.selectedBellConfig].delay = (te.vals[0]*60) + te.vals[1];
             }
             if(te.targetField === "CONF_CUTOFF") {
                 PRESET_CONFIGS[STATE.selectedPreset][STATE.selectedBellConfig].cutoff = (te.vals[0]*60) + te.vals[1];
             }
             
-            // Sauvegarde de la durée du programme
             if(te.targetField && te.targetField.startsWith("SET_PROG_DUR_")) {
-                 const keyName = te.targetField.substring(13); // ex: dur_messe
+                 const keyName = te.targetField.substring(13); 
                  SETTINGS[keyName] = (te.vals[0]*60) + te.vals[1];
             }
 
